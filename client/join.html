@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <title>Road Rumble – Unirse a la carrera</title>
+  <meta name="description" content="Únete a la sala de Road Rumble y vincula tu celular como control." />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<div class="grid-bg"></div>
+<div id="toast-container"></div>
+<div id="product-hub" style="position:fixed;right:16px;bottom:16px;z-index:20;"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+  STATE: loading
+════════════════════════════════════════════════════════════════════════ -->
+<div id="state-loading" class="page-state active screen layer">
+  <div class="flex-col items-center gap-16">
+    <h1 class="title-xl" style="font-size:3rem;">ROAD<br>RUMBLE</h1>
+    <div class="spinner"></div>
+    <p class="font-racing text-muted" style="font-size:0.85rem; letter-spacing:0.15em;">
+      CONECTANDO A LA SALA…
+    </p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+  STATE: error (room not found / full)
+════════════════════════════════════════════════════════════════════════ -->
+<div id="state-error" class="page-state screen layer">
+  <div class="glass flex-col items-center gap-24" style="padding:48px; max-width:480px; text-align:center;">
+    <div style="font-size:4rem;">🚫</div>
+    <h2 class="font-racing" style="font-size:1.6rem; color:var(--pink);">SALA NO DISPONIBLE</h2>
+    <p id="error-msg" class="text-muted" style="line-height:1.7; font-size:0.95rem;"></p>
+    <button onclick="window.location.href='/'" class="btn btn-secondary">
+      ← Ir al inicio
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+  STATE: qr  (seat assigned, showing QR to scan)
+════════════════════════════════════════════════════════════════════════ -->
+<div id="state-qr" class="page-state layer" style="width:100vw; height:100vh; flex-direction:column;">
+
+  <!-- Top banner -->
+  <div class="host-banner">
+    <div class="flex-row items-center gap-16">
+      <span class="title-sm" style="font-size:0.75rem;">ROAD RUMBLE</span>
+      <div class="flex-row items-center gap-8">
+        <span class="text-muted" style="font-size:0.8rem;">SALA</span>
+        <span id="banner-room-code" class="font-racing text-cyan" style="font-size:1.3rem; letter-spacing:0.2em;"></span>
+      </div>
+    </div>
+    <div class="flex-row items-center gap-8">
+      <span class="dot dot-on"></span>
+      <span class="text-muted" style="font-size:0.8rem;">Puesto asignado</span>
+    </div>
+  </div>
+
+  <div style="flex:1; display:flex; align-items:center; justify-content:center; padding:32px;">
+    <div class="flex-col items-center gap-32" style="max-width:480px; width:100%; text-align:center;">
+
+      <div class="flex-col gap-8">
+        <h2 class="font-racing" style="font-size:1.4rem; color:var(--cyan);">VINCULA TU CELULAR</h2>
+        <p class="text-muted" style="line-height:1.7; font-size:0.9rem;">
+          Escanea el código QR con la cámara de tu celular para usarlo como control de juego.
+        </p>
+      </div>
+
+      <div class="qr-wrapper">
+        <div class="qr-card" style="box-shadow:0 0 50px rgba(0 245 212 / 0.35);">
+          <img id="player-qr-img" src="" alt="Tu QR de control" />
+        </div>
+        <div class="flex-row items-center gap-8">
+          <span class="dot dot-warn" style="animation-duration:2s;"></span>
+          <span class="text-muted" style="font-size:0.8rem;">Esperando que escanees…</span>
+        </div>
+      </div>
+
+      <!-- URL fallback -->
+      <div class="invite-box" style="max-width:380px; width:100%;">
+        <span id="ctrl-url-display" class="invite-url" style="font-size:0.75rem;"></span>
+        <button id="btn-copy-ctrl" class="btn btn-secondary btn-sm btn-icon">📋</button>
+      </div>
+
+      <div class="flex-col gap-10 w-full" style="max-width:380px;">
+        <a id="btn-open-ctrl-tab" href="#" target="_blank" class="btn btn-primary" style="font-size:0.85rem; text-decoration:none; padding:12px 18px; text-align:center; display:flex; align-items:center; justify-content:center; gap:8px;">
+          📱 Abrir control en nueva pestaña
+        </a>
+      </div>
+
+      <p class="text-muted" style="font-size:0.75rem;">
+        ¿No puedes escanear? Copia el enlace o ábrelo en una nueva pestaña.
+      </p>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+  STATE: linked  (phone connected, Stage 2 Loadout Selection)
+════════════════════════════════════════════════════════════════════════ -->
+<div id="state-linked" class="page-state layer" style="width:100vw; height:100vh; flex-direction:column;">
+
+  <!-- Top banner -->
+  <div class="host-banner">
+    <div class="flex-row items-center gap-16">
+      <span class="title-sm" style="font-size:0.75rem;">ROAD RUMBLE</span>
+      <div class="flex-row items-center gap-8">
+        <span class="text-muted" style="font-size:0.8rem;">SALA</span>
+        <span id="banner-room-code-linked" class="font-racing text-cyan" style="font-size:1.3rem; letter-spacing:0.2em;"></span>
+      </div>
+    </div>
+    <div class="flex-row items-center gap-8">
+      <span class="dot dot-on"></span>
+      <span id="linked-player-name" class="text-cyan" style="font-size:0.85rem; font-weight:600;"></span>
+    </div>
+  </div>
+
+  <div style="flex:1; overflow-y:auto; padding:24px; display:flex; align-items:center; justify-content:center;">
+    <div class="loadout-container">
+      
+      <!-- Left Column: Car Showcase -->
+      <div class="glass car-showcase">
+        <div class="flex-row items-center justify-between" style="justify-content:space-between;">
+          <p class="title-sm" style="font-size:0.75rem;">SELECCIONA TU VEHÍCULO</p>
+          <span id="guest-car-counter" class="car-counter">1 / 10</span>
+        </div>
+
+        <!-- 360 Animated Canvas Stage -->
+        <div class="car-stage">
+          <canvas id="guest-car-preview-canvas" width="460" height="220"></canvas>
+        </div>
+
+        <!-- Navigation Buttons -->
+        <div class="car-nav-bar">
+          <button id="guest-btn-car-prev" class="btn btn-secondary flex-row items-center gap-8">
+            ◀ &nbsp;Anterior
+          </button>
+          <div class="flex-col items-center">
+            <h2 id="guest-car-name" class="font-racing text-cyan" style="font-size:1.3rem; margin:0;">Apex Venom</h2>
+            <span id="guest-car-role" style="font-size:0.72rem; color:var(--text-muted);">Superdeportivo</span>
+          </div>
+          <button id="guest-btn-car-next" class="btn btn-secondary flex-row items-center gap-8">
+            Siguiente &nbsp;▶
+          </button>
+        </div>
+
+        <!-- Car Info & Stats -->
+        <div class="glass car-info-card">
+          <p id="guest-car-tagline" class="text-muted" style="font-size:0.8rem; font-style:italic; margin-bottom:12px;">
+            Velocidad punta letal a costa de blindaje
+          </p>
+
+          <div class="stats-grid">
+            <div class="stat-row">
+              <span class="stat-label">Velocidad</span>
+              <div class="stat-bar-track"><div id="guest-stat-speed-bar" class="stat-bar-fill" style="background:#00f5d4; width:90%;"></div></div>
+              <span id="guest-stat-speed-val" class="stat-value">90</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Aceleración</span>
+              <div class="stat-bar-track"><div id="guest-stat-accel-bar" class="stat-bar-fill" style="background:#fee440; width:85%;"></div></div>
+              <span id="guest-stat-accel-val" class="stat-value">85</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Manejo</span>
+              <div class="stat-bar-track"><div id="guest-stat-handling-bar" class="stat-bar-fill" style="background:#4cc9f0; width:80%;"></div></div>
+              <span id="guest-stat-handling-val" class="stat-value">80</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Derrape</span>
+              <div class="stat-bar-track"><div id="guest-stat-drift-bar" class="stat-bar-fill" style="background:#f72585; width:70%;"></div></div>
+              <span id="guest-stat-drift-val" class="stat-value">70</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Blindaje</span>
+              <div class="stat-bar-track"><div id="guest-stat-armor-bar" class="stat-bar-fill" style="background:#55a630; width:50%;"></div></div>
+              <span id="guest-stat-armor-val" class="stat-value">50</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Peso</span>
+              <div class="stat-bar-track"><div id="guest-stat-weight-bar" class="stat-bar-fill" style="background:#9d4edd; width:45%;"></div></div>
+              <span id="guest-stat-weight-val" class="stat-value">45</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Weapon Selector & Ready State -->
+      <div class="glass weapons-showcase">
+        <div class="flex-row items-center justify-between" style="justify-content:space-between;">
+          <p class="title-sm" style="font-size:0.75rem;">ARMA MONTADA (1 POR CARRERA)</p>
+          <span class="text-muted" style="font-size:0.75rem;">7 Armas tácticas</span>
+        </div>
+
+        <!-- Weapon Selection Grid -->
+        <div id="guest-weapons-grid" class="weapons-grid">
+          <!-- Populated by JS -->
+        </div>
+
+        <!-- Weapon Detailed Card -->
+        <div class="glass weapon-details-card">
+          <div class="flex-row items-center gap-12">
+            <span id="guest-weapon-icon" style="font-size:1.8rem;">⚡</span>
+            <div>
+              <h3 id="guest-weapon-name" class="font-racing text-cyan" style="font-size:1.05rem; margin:0;">Ametralladora Vulcan</h3>
+              <span id="guest-weapon-type" style="font-size:0.7rem; color:var(--text-muted);">Proyectiles balísticos rápidos</span>
+            </div>
+          </div>
+          <p id="guest-weapon-desc" class="text-muted" style="font-size:0.78rem; line-height:1.5;">
+            Cadencia infernal y facilidad de uso. Excelente para desgastar rivales a media distancia.
+          </p>
+          <div class="flex-row gap-16" style="margin-top:4px;">
+            <div class="flex-row items-center gap-4">
+              <span class="text-muted" style="font-size:0.7rem;">Munición:</span>
+              <span id="guest-weapon-ammo" class="text-cyan font-racing" style="font-size:0.8rem; font-weight:700;">100</span>
+            </div>
+            <div class="flex-row items-center gap-4">
+              <span class="text-muted" style="font-size:0.7rem;">Daño:</span>
+              <span id="guest-weapon-dmg" class="text-pink font-racing" style="font-size:0.8rem; font-weight:700;">Medio</span>
+            </div>
+            <div class="flex-row items-center gap-4">
+              <span class="text-muted" style="font-size:0.7rem;">Dificultad:</span>
+              <span id="guest-weapon-diff" class="text-muted font-racing" style="font-size:0.8rem;">Fácil</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ready Button -->
+        <div class="mt-auto flex-col gap-12">
+          <button id="guest-btn-ready" class="btn-ready">
+            LISTO PARA CORRER
+          </button>
+          <p id="guest-ready-status-text" class="text-muted" style="font-size:0.75rem; text-align:center;">
+            Pulsa cuando hayas definido tu carro y arma.
+          </p>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+  STATE: race  (active 2D race screen)
+════════════════════════════════════════════════════════════════════════ -->
+<div id="state-race" class="page-state layer" style="width:100vw; height:100vh; overflow:hidden; background:#0a0d14;">
+  <canvas id="race-canvas" style="width:100%; height:100%; display:block;"></canvas>
+</div>
+
+<!-- ─── Scripts ──────────────────────────────────────────────────────────── -->
+<script src="/shared/constants.js?v=8"></script>
+<script src="/config/cars.js"></script>
+<script src="/config/weapons.js"></script>
+<script src="/config/tracks.js"></script>
+<script src="/config/scoring.js"></script>
+<script src="/js/renderCar.js"></script>
+<script src="/js/productHub.js?v=2"></script>
+<script src="/js/gameRenderer.js?v=6"></script>
+<script src="/vendor/three/build/three.min.js"></script>
+<script src="/vendor/three/examples/js/postprocessing/Pass.js"></script>
+<script src="/vendor/three/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="/vendor/three/examples/js/shaders/CopyShader.js"></script>
+<script src="/vendor/three/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="/vendor/three/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="/vendor/three/examples/js/postprocessing/RenderPass.js"></script>
+<script src="/vendor/three/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="/js/threeGameRenderer.js?v=7"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/player.js"></script>
+</body>
+</html>

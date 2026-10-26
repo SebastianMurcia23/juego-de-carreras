@@ -1,0 +1,10 @@
+{
+  "name": "Road Rumble",
+  "short_name": "Road Rumble",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#070b14",
+  "theme_color": "#00f5d4",
+  "description": "Carreras multijugador con armas y el celular como volante.",
+  "icons": []
+}

@@ -1,0 +1,1435 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   Road Rumble – Global Styles
+   Dark neon racing aesthetic · Glassmorphism · Orbitron / Space Grotesk
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Space+Grotesk:wght@300;400;500;600&display=swap');
+
+/* ─── CSS Variables ────────────────────────────────────────────────────── */
+:root {
+  --bg:          #07071a;
+  --bg-deep:     #04040f;
+  --surface:     rgba(255 255 255 / 0.04);
+  --surface-hi:  rgba(255 255 255 / 0.08);
+  --border:      rgba(0 245 212 / 0.18);
+  --border-hi:   rgba(0 245 212 / 0.45);
+
+  --cyan:        #00f5d4;
+  --cyan-dim:    rgba(0 245 212 / 0.15);
+  --pink:        #ff2d78;
+  --pink-dim:    rgba(255 45 120 / 0.15);
+  --purple:      #7b2fbe;
+  --yellow:      #ffd60a;
+
+  --text:        #e8e8ff;
+  --text-muted:  rgba(232 232 255 / 0.55);
+  --text-dim:    rgba(232 232 255 / 0.3);
+
+  --glow-cyan:   0 0 16px rgba(0 245 212 / 0.6);
+  --glow-pink:   0 0 16px rgba(255 45 120 / 0.6);
+  --glow-btn:    0 0 32px rgba(0 245 212 / 0.35);
+
+  --radius:      12px;
+  --radius-lg:   20px;
+  --transition:  0.2s ease;
+}
+
+/* ─── Reset ────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: 'Space Grotesk', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Animated grid background ─────────────────────────────────────────── */
+.grid-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(0 245 212 / 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0 245 212 / 0.04) 1px, transparent 1px);
+  background-size: 60px 60px;
+  animation: grid-scroll 20s linear infinite;
+}
+
+@keyframes grid-scroll {
+  0%   { background-position: 0 0; }
+  100% { background-position: 0 60px; }
+}
+
+.grid-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 60% 50% at 50% 0%, rgba(123 47 190 / 0.25) 0%, transparent 70%),
+              radial-gradient(ellipse 50% 60% at 50% 100%, rgba(0 245 212 / 0.1) 0%, transparent 70%);
+}
+
+/* ─── Layer helper ─────────────────────────────────────────────────────── */
+.layer { position: relative; z-index: 1; }
+/* page-state overrides layer positioning */
+.page-state.layer { position: fixed; }
+
+/* ─── Typography ───────────────────────────────────────────────────────── */
+.font-racing { font-family: 'Orbitron', monospace; }
+
+.title-xl {
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(2.8rem, 8vw, 6rem);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  background: linear-gradient(135deg, var(--cyan) 0%, #fff 50%, var(--pink) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 24px rgba(0 245 212 / 0.5));
+}
+
+.title-sm {
+  font-family: 'Orbitron', monospace;
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.code-display {
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(2rem, 6vw, 3.5rem);
+  font-weight: 900;
+  letter-spacing: 0.25em;
+  color: var(--cyan);
+  text-shadow: var(--glow-cyan);
+}
+
+/* ─── Glass card ───────────────────────────────────────────────────────── */
+.glass {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.glass-hi {
+  background: var(--surface-hi);
+  border-color: var(--border-hi);
+}
+
+/* ─── Buttons ──────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 32px;
+  border: none;
+  border-radius: var(--radius);
+  font-family: 'Orbitron', monospace;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all var(--transition);
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+}
+
+.btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255 255 255 / 0.12) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+.btn:hover::before { opacity: 1; }
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--cyan) 0%, #00c4a8 100%);
+  color: var(--bg-deep);
+  box-shadow: var(--glow-btn);
+}
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 48px rgba(0 245 212 / 0.55);
+}
+.btn-primary:active { transform: translateY(0); }
+
+.btn-secondary {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-hi);
+}
+.btn-secondary:hover {
+  background: var(--surface-hi);
+  border-color: var(--cyan);
+  box-shadow: var(--glow-cyan);
+  color: var(--cyan);
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, var(--pink) 0%, #c7003f 100%);
+  color: #fff;
+  box-shadow: var(--glow-pink);
+}
+
+.btn-sm {
+  padding: 8px 18px;
+  font-size: 0.75rem;
+}
+
+.btn-icon {
+  padding: 10px 14px;
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* ─── Form inputs ─────────────────────────────────────────────────────── */
+.input {
+  width: 100%;
+  padding: 14px 20px;
+  background: rgba(255 255 255 / 0.05);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 1.1rem;
+  color: var(--text);
+  outline: none;
+  transition: all var(--transition);
+}
+.input:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px rgba(0 245 212 / 0.12);
+  background: rgba(255 255 255 / 0.07);
+}
+.input::placeholder { color: var(--text-dim); }
+
+/* ─── QR Code card ─────────────────────────────────────────────────────── */
+.qr-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.qr-card {
+  padding: 16px;
+  background: #fff;
+  border-radius: var(--radius);
+  box-shadow: 0 0 40px rgba(0 245 212 / 0.3);
+  animation: qr-pulse 3s ease-in-out infinite;
+}
+
+.qr-card img {
+  display: block;
+  width: 220px;
+  height: 220px;
+  border-radius: 4px;
+}
+
+@keyframes qr-pulse {
+  0%, 100% { box-shadow: 0 0 30px rgba(0 245 212 / 0.25); }
+  50%       { box-shadow: 0 0 60px rgba(0 245 212 / 0.55), 0 0 100px rgba(0 245 212 / 0.15); }
+}
+
+/* ─── Status badge ─────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-family: 'Orbitron', monospace;
+}
+.badge-qr      { background: rgba(123 47 190 / 0.25); color: #b57bee; border: 1px solid rgba(123 47 190 / 0.4); }
+.badge-linked  { background: rgba(0 245 212 / 0.15); color: var(--cyan); border: 1px solid rgba(0 245 212 / 0.35); }
+.badge-ready   { background: rgba(255 214 10 / 0.15); color: var(--yellow); border: 1px solid rgba(255 214 10 / 0.35); }
+.badge-host    { background: rgba(255 45 120 / 0.15); color: var(--pink); border: 1px solid rgba(255 45 120 / 0.35); }
+.badge-offline { background: rgba(255 255 255 / 0.05); color: var(--text-muted); border: 1px solid var(--border); }
+
+/* ─── Dot indicator ────────────────────────────────────────────────────── */
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.dot-on  { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); animation: blink 1.5s ease-in-out infinite; }
+.dot-off { background: var(--text-dim); }
+.dot-warn { background: var(--yellow); box-shadow: 0 0 8px var(--yellow); }
+
+@keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* ─── Invite link box ──────────────────────────────────────────────────── */
+.invite-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.invite-url {
+  flex: 1;
+  font-family: 'Space Grotesk', monospace;
+  font-size: 0.85rem;
+  color: var(--cyan);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Admin panel (right slide-in) ────────────────────────────────────── */
+#admin-panel {
+  position: fixed;
+  top: 0;
+  right: -400px;
+  width: 380px;
+  height: 100vh;
+  z-index: 100;
+  background: rgba(4 4 15 / 0.97);
+  border-left: 1px solid var(--border);
+  backdrop-filter: blur(30px);
+  display: flex;
+  flex-direction: column;
+  transition: right 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 24px 20px;
+  overflow-y: auto;
+  gap: 20px;
+}
+#admin-panel.open { right: 0; }
+
+.admin-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.player-list { display: flex; flex-direction: column; gap: 8px; }
+
+.player-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: background var(--transition);
+}
+.player-row:hover { background: var(--surface-hi); }
+.player-row .player-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.player-row .player-num {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  min-width: 20px;
+}
+
+/* ─── Toast notification ───────────────────────────────────────────────── */
+#toast-container {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  pointer-events: none;
+}
+
+/* ─── Admin panel (slide-in) ────────────────────────────────────────────── */
+#admin-panel {
+  position: fixed;
+  top: 0;
+  right: -450px;
+  width: min(420px, 100vw);
+  height: 100vh;
+  z-index: 1000;
+  background: rgba(4, 4, 15, 0.98);
+  border-left: 1px solid var(--border);
+  backdrop-filter: blur(30px);
+  display: flex;
+  flex-direction: column;
+  transition: right 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 24px 20px;
+  gap: 16px;
+  overflow-y: auto;
+  pointer-events: auto;
+}
+#admin-panel.open {
+  right: 0;
+  box-shadow: -8px 0 32px rgba(0, 0, 0, 0.7);
+}
+.admin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.toast {
+  padding: 12px 24px;
+  background: rgba(10 10 30 / 0.95);
+  border: 1px solid var(--border-hi);
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text);
+  backdrop-filter: blur(20px);
+  animation: toast-in 0.3s ease;
+  box-shadow: 0 4px 24px rgba(0 0 0 / 0.4);
+}
+.toast.error { border-color: var(--pink); color: var(--pink); }
+.toast.success { border-color: var(--cyan); color: var(--cyan); }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ─── Page states helper ───────────────────────────────────────────────── */
+.page-state {
+  display: none !important;
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  overflow: auto;
+}
+.page-state.active {
+  display: flex !important;
+}
+
+/* ─── Fullscreen centered layout ───────────────────────────────────────── */
+.screen {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 32px;
+  padding: 24px;
+  text-align: center;
+}
+
+/* ─── Spinner ──────────────────────────────────────────────────────────── */
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid var(--surface-hi);
+  border-top-color: var(--cyan);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ─── Subtle divider ───────────────────────────────────────────────────── */
+hr.divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  width: 100%;
+}
+
+/* ─── Scrollbar ────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-hi); }
+
+/* ─── Utility ──────────────────────────────────────────────────────────── */
+.flex-col  { display: flex; flex-direction: column; }
+.flex-row  { display: flex; flex-direction: row; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.gap-4  { gap: 4px; }
+.gap-8  { gap: 8px; }
+.gap-12 { gap: 12px; }
+.gap-16 { gap: 16px; }
+.gap-20 { gap: 20px; }
+.gap-24 { gap: 24px; }
+.justify-between { justify-content: space-between; }
+.text-center { text-align: center; }
+.text-muted { color: var(--text-muted); }
+.text-cyan  { color: var(--cyan); }
+.text-pink  { color: var(--pink); }
+.text-yellow { color: var(--yellow); }
+.text-purple { color: var(--purple); }
+.w-full { width: 100%; }
+.mt-auto { margin-top: auto; }
+.hidden { display: none !important; }
+
+/* ─── Controller-specific ──────────────────────────────────────────────── */
+.ctrl-screen {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+  touch-action: none; /* prevent scroll/zoom during play */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Controller name entry */
+.name-screen {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  padding: 40px 32px;
+}
+
+/* Controller active state */
+.controller-ui {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+/* Speedometer canvas behind everything */
+#speedometer-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.12;
+  pointer-events: none;
+}
+
+/* Steering indicator bar in HUD */
+.steer-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.steer-notch {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.steer-bar {
+  width: 170px;
+  height: 8px;
+  background: rgba(255 255 255 / 0.12);
+  border-radius: 4px;
+  position: relative;
+  overflow: visible;
+  border: 1px solid rgba(0, 245, 212, 0.2);
+}
+.steer-center-mark {
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.4);
+  border-radius: 1px;
+}
+.steer-thumb {
+  width: 20px;
+  height: 12px;
+  top: -3px;
+  background: var(--cyan);
+  border-radius: 4px;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  box-shadow: 0 0 12px var(--cyan);
+  transition: left 0.04s ease-out;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   PERMANENT HORIZONTAL VIEWPORT (Automatic Landscape on all Phones)
+══════════════════════════════════════════════════════════════════════════ */
+#ctrl-viewport {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  overflow: hidden !important;
+  background: #050714 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  touch-action: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  box-sizing: border-box !important;
+}
+
+/* If device is in portrait (e.g. portrait lock on):
+   Auto-rotate the entire viewport 90deg so when held horizontally, it occupies 100% of the screen! */
+@media screen and (orientation: portrait), screen and (max-aspect-ratio: 1/1) {
+  #ctrl-viewport {
+    width: 100dvh !important;
+    height: 100dvw !important;
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) rotate(90deg) !important;
+    transform-origin: center center !important;
+  }
+}
+
+/* If device is naturally in landscape: */
+@media screen and (orientation: landscape) and (min-aspect-ratio: 1/1) {
+  #ctrl-viewport {
+    width: 100dvw !important;
+    height: 100dvh !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    transform: none !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   COCKPIT CONTROLLER - RESPONSIVE 3-COLUMN FLEX LAYOUT
+══════════════════════════════════════════════════════════════════════════ */
+.ctrl-cockpit {
+  width: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  overflow: hidden !important;
+  background: radial-gradient(circle at center, #0f1532 0%, #050714 90%) !important;
+  padding: env(safe-area-inset-top, 4px) env(safe-area-inset-right, 10px) env(safe-area-inset-bottom, 6px) env(safe-area-inset-left, 10px) !important;
+  box-sizing: border-box !important;
+  touch-action: none !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
+/* Controller HUD */
+.ctrl-hud {
+  width: 100%;
+  height: 44px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 8px;
+  box-sizing: border-box;
+  background: linear-gradient(to bottom, rgba(7 7 26 / 0.95), rgba(7 7 26 / 0.4));
+  border-bottom: 1px solid rgba(0, 245, 212, 0.15);
+  flex-shrink: 0;
+  z-index: 30;
+}
+
+.hud-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hud-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.hud-label {
+  font-size: 0.52rem;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 2px;
+}
+.hud-pilot-name {
+  color: var(--cyan);
+  font-size: 0.82rem;
+  font-weight: 800;
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hud-val {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Center HUD Steer Indicator */
+.hud-center-steer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.steer-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.steer-notch {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.58rem;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+.steer-bar {
+  width: clamp(100px, 18vw, 160px);
+  height: 7px;
+  background: rgba(255 255 255 / 0.12);
+  border-radius: 4px;
+  position: relative;
+  overflow: visible;
+  border: 1px solid rgba(0, 245, 212, 0.25);
+}
+.steer-center-mark {
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  height: 11px;
+  background: rgba(255, 255, 255, 0.45);
+}
+.steer-thumb {
+  width: 18px;
+  height: 11px;
+  top: -2px;
+  background: var(--cyan);
+  border-radius: 3px;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  box-shadow: 0 0 10px var(--cyan);
+  transition: left 0.03s linear;
+}
+.steer-deg-text {
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  font-family: 'Orbitron', monospace;
+  letter-spacing: 0.08em;
+  margin-top: 1px;
+}
+
+/* Responsive Cockpit Body */
+.cockpit-body {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  flex: 1;
+  width: 100%;
+  padding: 6px 12px;
+  box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Cockpit Wings (Left and Right Thumb zones) */
+.cockpit-wing {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  align-items: center;
+  height: 100%;
+  gap: 8px;
+  z-index: 25;
+  flex-shrink: 0;
+}
+.wing-left  { align-items: flex-start; }
+.wing-right { align-items: flex-end; }
+
+/* Center Cockpit Area */
+.cockpit-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 1;
+  height: 100%;
+  z-index: 15;
+  pointer-events: none;
+}
+.cockpit-center > * {
+  pointer-events: auto;
+}
+
+.cockpit-dashboard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.speed-cluster {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.speed-number {
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(1.8rem, 5vh, 2.8rem);
+  font-weight: 900;
+  color: #ffffff;
+  text-shadow: 0 0 16px rgba(0, 245, 212, 0.6);
+  line-height: 1;
+}
+.speed-unit {
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(0.6rem, 1.6vh, 0.8rem);
+  color: var(--cyan);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.tilt-horizon-wrapper {
+  position: relative;
+  width: clamp(140px, 30vw, 220px);
+  height: clamp(50px, 12vh, 75px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.horizon-ring {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, rgba(0, 245, 212, 0.08) 0%, rgba(7, 10, 20, 0.6) 80%);
+  border: 1px solid rgba(0, 245, 212, 0.25);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: inset 0 0 12px rgba(0, 245, 212, 0.15);
+}
+
+.crosshair-center {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--yellow);
+  border-radius: 50%;
+  z-index: 2;
+  box-shadow: 0 0 8px var(--yellow);
+}
+
+.horizon-line {
+  position: absolute;
+  width: 86%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transform-origin: 50% 50%;
+  transition: transform 0.05s ease-out;
+  will-change: transform;
+  z-index: 3;
+}
+
+.horizon-bar {
+  flex: 1;
+  height: 3px;
+  background: linear-gradient(90deg, #ff007f 0%, #00f5d4 50%, #fee440 100%);
+  border-radius: 3px;
+  box-shadow: 0 0 10px rgba(0, 245, 212, 0.8);
+  margin: 0 6px;
+}
+
+.horizon-arrow-left, .horizon-arrow-right {
+  font-size: 0.7rem;
+  color: var(--cyan);
+  text-shadow: 0 0 8px var(--cyan);
+  user-select: none;
+}
+
+.steer-degrees-readout {
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(0.7rem, 2vh, 0.95rem);
+  font-weight: 800;
+  color: var(--yellow);
+  text-shadow: 0 0 8px rgba(254, 228, 64, 0.6);
+  letter-spacing: 0.08em;
+}
+
+.gyro-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 245, 212, 0.1);
+  border: 1px solid rgba(0, 245, 212, 0.28);
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(0.5rem, 1.8vw, 0.6rem);
+  letter-spacing: 0.06em;
+  color: var(--cyan);
+}
+.gyro-dot {
+  width: 6px;
+  height: 6px;
+  background: #00e87a;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #00e87a;
+  animation: gyroPulse 1.2s infinite alternate;
+}
+
+.ctrl-util-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+  max-width: 280px;
+}
+.ctrl-util-bar .btn {
+  padding: 4px 8px;
+  font-size: 0.65rem;
+}
+
+/* Ergonomic Thumb Action Buttons */
+.ctrl-btn {
+  border: none;
+  font-family: 'Orbitron', monospace;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: transform 0.06s ease, box-shadow 0.06s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  border-radius: 16px;
+  box-sizing: border-box;
+}
+.ctrl-btn.pressed, .ctrl-btn:active {
+  transform: scale(0.92);
+}
+
+.ctrl-btn .btn-icon {
+  font-size: clamp(1rem, 3.2vh, 1.4rem);
+  line-height: 1;
+}
+.ctrl-btn .btn-title {
+  font-size: clamp(0.65rem, 2.2vh, 0.8rem);
+  font-weight: 900;
+  line-height: 1.1;
+}
+.ctrl-btn .btn-sub {
+  font-size: clamp(0.48rem, 1.6vh, 0.58rem);
+  opacity: 0.75;
+  line-height: 1;
+}
+
+/* Accelerator (GAS) - Vibrant Green Pedal */
+.btn-accel {
+  width: clamp(90px, 20vw, 135px);
+  height: clamp(54px, 24vh, 85px);
+  background: linear-gradient(135deg, #00f07f, #00994d);
+  color: #012b14;
+  box-shadow: 0 0 20px rgba(0 240 127 / 0.5);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+}
+.btn-accel.pressed, .btn-accel:active {
+  box-shadow: 0 0 35px rgba(0 240 127 / 0.85);
+}
+
+/* Brake / Reverse - Vibrant Red */
+.btn-brake {
+  width: clamp(86px, 19vw, 125px);
+  height: clamp(50px, 22vh, 78px);
+  background: linear-gradient(135deg, #ff0055, #990033);
+  color: #fff;
+  box-shadow: 0 0 18px rgba(255 0 85 / 0.45);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+}
+
+/* Fire - Vibrant Gold / Amber */
+.btn-fire {
+  width: clamp(86px, 19vw, 125px);
+  height: clamp(48px, 20vh, 72px);
+  background: linear-gradient(135deg, var(--yellow), #c28800);
+  color: #261700;
+  box-shadow: 0 0 18px rgba(255 214 10 / 0.45);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Drift - Neon Purple */
+.btn-drift {
+  width: clamp(86px, 19vw, 125px);
+  height: clamp(48px, 20vh, 72px);
+  background: linear-gradient(135deg, #a855f7, #581c87);
+  color: #f3e8ff;
+  box-shadow: 0 0 16px rgba(168 85 247 / 0.4);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+}
+
+/* Background Speedometer */
+.speed-overlay {
+  position: absolute;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Orbitron', monospace;
+  font-size: clamp(2rem, 12vh, 4rem);
+  font-weight: 900;
+  color: rgba(255 255 255 / 0.06);
+  pointer-events: none;
+  user-select: none;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  z-index: 1;
+}
+.speed-unit {
+  font-size: 0.8rem;
+  color: rgba(255 255 255 / 0.08);
+}
+
+/* Lobby waiting screen on computer */
+.lobby-screen {
+  width: 100%;
+  max-width: 1100px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+}
+@media (max-width: 768px) {
+  .lobby-screen {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lobby-panel {
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  overflow-y: auto;
+}
+
+/* Host view specific */
+.host-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  grid-column: 1 / -1;
+}
+
+/* Responsive (phones in portrait for controller name-entry) */
+@media (max-width: 480px) {
+  .name-screen { padding: 32px 20px; }
+  .title-xl { font-size: 2.2rem; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   STAGE 2: LOADOUT SELECTION, READY STATES & ADMIN CONTROLS
+════════════════════════════════════════════════════════════════════════════ */
+
+/* Loadout main container (fills the player screen) */
+.loadout-container {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 28px;
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  align-items: stretch;
+}
+
+@media (max-width: 900px) {
+  .loadout-container {
+    grid-template-columns: 1fr;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+  }
+}
+
+/* Car Showcase Column */
+.car-showcase {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+}
+
+.car-stage {
+  position: relative;
+  width: 100%;
+  height: 220px;
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: radial-gradient(circle at center, rgba(0 245 212 / 0.12) 0%, rgba(8 11 18 / 0.95) 75%);
+}
+
+#car-preview-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.car-nav-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.car-counter {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+}
+
+.car-info-card {
+  padding: 16px 20px;
+}
+
+/* Stat bars */
+.stats-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.stat-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 36px;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.75rem;
+}
+
+.stat-label {
+  color: var(--text-muted);
+  font-family: 'Space Grotesk', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stat-bar-track {
+  width: 100%;
+  height: 8px;
+  background: rgba(255 255 255 / 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.stat-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 10px currentColor;
+}
+
+.stat-value {
+  font-family: 'Orbitron', monospace;
+  font-weight: 700;
+  text-align: right;
+  color: var(--text);
+}
+
+/* Weapons Selector Column */
+.weapons-showcase {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+}
+
+.weapons-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.weapon-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 12px;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.weapon-btn:hover {
+  border-color: var(--border-hi);
+  background: var(--surface-hi);
+  transform: translateY(-2px);
+}
+
+.weapon-btn.selected {
+  border-color: var(--cyan);
+  background: rgba(0 245 212 / 0.12);
+  box-shadow: 0 0 16px rgba(0 245 212 / 0.3);
+}
+
+.weapon-icon {
+  font-size: 1.4rem;
+}
+
+.weapon-name {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.weapon-type {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+.weapon-details-card {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(0 0 0 / 0.3);
+}
+
+/* Ready Action Button */
+.btn-ready {
+  width: 100%;
+  padding: 20px;
+  font-family: 'Orbitron', monospace;
+  font-size: 1.1rem;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  border-radius: 14px;
+  border: 2px solid var(--border);
+  background: var(--surface-hi);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 20px rgba(0 0 0 / 0.4);
+}
+
+.btn-ready:hover {
+  border-color: var(--cyan);
+  color: var(--cyan);
+  box-shadow: var(--glow-cyan);
+}
+
+.btn-ready.is-ready {
+  background: linear-gradient(135deg, #00f5d4 0%, #00bbf9 100%);
+  color: #050810;
+  border-color: #00f5d4;
+  box-shadow: 0 0 35px rgba(0 245 212 / 0.6);
+  animation: pulse-ready 1.8s infinite;
+}
+
+@keyframes pulse-ready {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 25px rgba(0 245 212 / 0.5); }
+  50% { transform: scale(1.02); box-shadow: 0 0 45px rgba(0 245 212 / 0.85); }
+}
+
+/* Player List Stage 2 Badges and Thumbs */
+.player-thumb-wrap {
+  width: 44px;
+  height: 28px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0 0 0 / 0.4);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.player-thumb-canvas {
+  width: 42px;
+  height: 26px;
+}
+
+.badge-ready {
+  background: rgba(0 245 212 / 0.2);
+  color: var(--cyan);
+  border: 1px solid var(--cyan);
+  box-shadow: 0 0 10px rgba(0 245 212 / 0.3);
+  font-family: 'Orbitron', monospace;
+  font-size: 0.65rem;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+.badge-selecting {
+  background: rgba(255 183 3 / 0.15);
+  color: #ffb703;
+  border: 1px solid rgba(255 183 3 / 0.4);
+  font-size: 0.65rem;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.btn-kick {
+  background: transparent;
+  border: 1px solid rgba(255 0 85 / 0.3);
+  color: var(--pink);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn-kick:hover {
+  background: var(--pink);
+  color: #fff;
+  box-shadow: 0 0 12px var(--pink);
+}
+
+/* Admin Panel Settings Form */
+.admin-settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(0 0 0 / 0.25);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.admin-select {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 0.85rem;
+  outline: none;
+  cursor: pointer;
+}
+.admin-select:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 12px rgba(0 245 212 / 0.3);
+}
+
+.btn-start-game {
+  width: 100%;
+  padding: 18px;
+  font-family: 'Orbitron', monospace;
+  font-size: 1.1rem;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  background: linear-gradient(135deg, var(--pink) 0%, #ff0055 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  box-shadow: 0 0 25px rgba(255 0 85 / 0.5);
+  transition: all 0.2s ease;
+}
+.btn-start-game:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 40px rgba(255 0 85 / 0.8);
+}
+.btn-start-game:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Mobile loadout selection view */
+.ctrl-loadout-screen {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 12px;
+  overflow-y: auto;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ctrl-car-card {
+  width: 100%;
+  max-width: 360px;
+  padding: 16px;
+  border-radius: 14px;
+  text-align: center;
+}
+
+.ctrl-btn-ready {
+  width: 100%;
+  max-width: 360px;
+  padding: 16px;
+  font-family: 'Orbitron', monospace;
+  font-size: 1rem;
+  font-weight: 800;
+  border-radius: 12px;
+}
+
+.pilot-chip { display:flex; align-items:center; gap:10px; padding:9px 13px; border:1px solid #00f5d477; border-radius:14px; background:#07101eee; color:#fff; box-shadow:0 8px 30px #0008; font-family:'Orbitron',monospace; text-align:left; cursor:pointer; }
+.pilot-avatar { display:grid; place-items:center; width:38px; height:38px; border-radius:10px; color:#07101e; background:linear-gradient(135deg,var(--cyan),#a5fff2); font-size:.7rem; font-weight:900; }
+.pilot-copy { min-width:118px; display:grid; gap:3px; }.pilot-copy strong{font-size:.72rem}.pilot-copy small{color:#9aa8bd;font-size:.55rem}.pilot-copy i{height:3px;background:#ffffff20;border-radius:4px;overflow:hidden}.pilot-copy i b{display:block;height:100%;background:var(--pink)}.pilot-coins{color:#ffd166;font-size:.68rem}
+.landing-feature-strip { display:flex; gap:16px; color:#71809b; font:600 .58rem 'Orbitron',monospace; letter-spacing:.08em; }.landing-feature-strip b{color:var(--cyan);margin-right:4px}
+.product-modal{position:fixed;inset:0;z-index:100;background:#02040bcc;display:grid;place-items:center;padding:20px;backdrop-filter:blur(8px)}.product-window{width:min(920px,100%);max-height:90vh;overflow:auto;background:linear-gradient(145deg,#10182a,#070b16);border:1px solid #00f5d466;border-radius:20px;box-shadow:0 25px 100px #000; color:#fff}.product-close{position:absolute;margin:14px 18px 0 0;right:0;background:none;border:0;color:#aab8cf;font-size:2rem;cursor:pointer}.product-window-head{display:flex;justify-content:space-between;padding:28px 32px 20px;border-bottom:1px solid #ffffff12}.product-window-head small,.eyebrow{color:var(--cyan);font:600 .58rem 'Orbitron',monospace;letter-spacing:.14em}.product-window-head h2{margin-top:8px;font:900 clamp(1.3rem,4vw,2.1rem) 'Orbitron',monospace}.product-window-head h2 em{color:var(--pink);font-style:normal}.garage-stats{display:flex;gap:15px;align-items:center;color:#ffd166;font:700 .75rem 'Orbitron',monospace}.product-tabs{display:flex;gap:22px;padding:0 32px;border-bottom:1px solid #ffffff12}.product-tabs button{padding:16px 3px;background:none;border:0;border-bottom:2px solid transparent;color:#7e8ba4;font:700 .65rem 'Orbitron',monospace;cursor:pointer}.product-tabs button.active{color:var(--cyan);border-color:var(--cyan)}.product-content{padding:25px 32px 32px}.garage-hero,.season-banner{display:flex;gap:28px;align-items:center;padding:24px;border:1px solid #ffffff12;border-radius:15px;background:radial-gradient(circle at 15% 50%,#00f5d41c,transparent 45%),#ffffff06}.garage-car-art{font-size:6rem;filter:drop-shadow(0 0 18px #00f5d4);}.garage-hero h3,.season-banner h3{margin:8px 0;font:900 1.25rem 'Orbitron',monospace}.garage-hero p,.season-banner p{color:#9ba8bc;margin-bottom:15px}.neon-action,.cosmetic-card button{border:1px solid var(--pink);background:#f725851c;color:#fff;border-radius:7px;padding:9px 12px;font:700 .62rem 'Orbitron',monospace;cursor:pointer}.section-title{display:flex;justify-content:space-between;align-items:center;margin:25px 0 12px;font:800 .78rem 'Orbitron',monospace}.section-title span{color:#71809b;font-size:.5rem}.cosmetic-grid,.mission-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}.cosmetic-card,.mission-card{padding:12px;border:1px solid #ffffff14;border-radius:12px;background:#ffffff06}.cosmetic-preview{height:62px;display:grid;place-items:center;border-radius:8px;background:radial-gradient(circle,var(--item-color),transparent 65%),#0a101d;font-size:2.4rem;margin-bottom:9px}.cosmetic-card b,.cosmetic-card small{display:block}.cosmetic-card small,.mission-card p{color:#8794aa;font-size:.58rem;margin:4px 0 10px}.cosmetic-card button{width:100%;padding:7px}.cosmetic-card button.owned{border-color:#00f5d455;color:var(--cyan);background:#00f5d411}.mission-card span{color:#ffd166;font-size:.62rem}.season-track{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:18px}.season-track>div{display:grid;gap:8px;padding:12px;background:#ffffff08;border-radius:10px;font-size:.6rem}.season-track b{color:var(--cyan)}.season-track strong{color:var(--pink);font-size:.55rem}.leaderboard-list{display:grid;gap:8px}.leader-row{display:grid;grid-template-columns:40px 1fr auto auto;gap:12px;align-items:center;padding:14px;border:1px solid #ffffff12;border-radius:10px;background:#ffffff06;font:700 .7rem 'Orbitron',monospace}.leader-row>b{color:var(--pink);font-size:1rem}.leader-row span small{display:block;color:#8794aa;font:400 .6rem 'Space Grotesk',sans-serif;margin-top:3px}.leader-row strong{color:var(--cyan)}.leader-row em{color:#ffd166;font-style:normal;font-size:.58rem}.empty-state{color:#8794aa;text-align:center;padding:30px}
+@media(max-width:600px){.product-window-head,.product-content{padding-left:18px;padding-right:18px}.product-tabs{padding:0 18px}.garage-hero{display:block}.garage-car-art{text-align:center}.season-track{grid-template-columns:1fr}.pilot-chip{right:8px}.landing-feature-strip{gap:8px}}

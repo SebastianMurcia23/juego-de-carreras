@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Road Rumble – Control</title>
+  <meta name="description" content="Control de volante y armas para Road Rumble." />
+  <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    html, body {
+      overflow: hidden;
+      position: fixed;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<body style="background:var(--bg);">
+
+<div class="grid-bg"></div>
+<div id="toast-container"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+  PERMANENT HORIZONTAL VIEWPORT (Auto-locks to landscape on all devices)
+════════════════════════════════════════════════════════════════════════ -->
+<div id="ctrl-viewport">
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+  STATE: connecting
+════════════════════════════════════════════════════════════════════════ -->
+<div id="state-connecting" class="ctrl-screen">
+  <div class="screen layer">
+    <div class="spinner"></div>
+    <p class="font-racing text-muted" style="font-size:0.85rem; letter-spacing:0.15em;">
+      CONECTANDO AL JUEGO…
+    </p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+  STATE: error
+════════════════════════════════════════════════════════════════════════ -->
+<div id="state-error" class="ctrl-screen" style="display:none;">
+  <div class="screen layer">
+    <div style="font-size:3.5rem;">⚠️</div>
+    <h2 class="font-racing" style="font-size:1.3rem; color:var(--pink);">ENLACE INVÁLIDO</h2>
+    <p id="error-msg" class="text-muted" style="max-width:300px; line-height:1.6; font-size:0.9rem;">
+      No se pudo conectar a la sala. Escanea de nuevo el código QR desde tu pantalla.
+    </p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+  STATE: name-entry
+════════════════════════════════════════════════════════════════════════ -->
+<div id="state-name-entry" class="ctrl-screen" style="display:none;">
+  <div class="grid-bg"></div>
+  <div class="layer name-screen">
+
+    <div class="flex-col items-center gap-8">
+      <div style="font-size:3rem;">🏎️</div>
+      <h1 class="title-xl" style="font-size:2.2rem;">ROAD<br>RUMBLE</h1>
+      <p class="title-sm" style="font-size:0.75rem;">VOLANTE DEL CELULAR</p>
+    </div>
+
+    <div class="glass flex-col gap-20" style="padding:32px 24px; width:100%; max-width:360px;">
+      <div class="flex-col gap-8">
+        <label for="input-name" class="font-racing" style="font-size:0.75rem; color:var(--text-muted); letter-spacing:0.1em;">
+          TU NOMBRE DE PILOTO
+        </label>
+        <input
+          id="input-name"
+          class="input"
+          type="text"
+          placeholder="Ej: Speedy, Max, Luna…"
+          value="Piloto"
+          maxlength="20"
+          autocomplete="off"
+          autocorrect="off"
+          spellcheck="false"
+          style="font-size:1.2rem; text-align:center; font-weight:600;"
+        />
+      </div>
+      <button id="btn-accept-name" class="btn btn-primary w-full" style="padding:18px;">
+        🎮 &nbsp;¡Ir al Control!
+      </button>
+    </div>
+
+    <p class="text-muted" style="font-size:0.78rem; text-align:center; line-height:1.6; max-width:280px;">
+      Este celular se convertirá en tu volante.<br>Gira el dispositivo o toca las flechas.
+    </p>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+  STATE: permission  (iOS gyroscope permission gate)
+════════════════════════════════════════════════════════════════════════ -->
+<div id="state-permission" class="ctrl-screen" style="display:none;">
+  <div class="grid-bg"></div>
+  <div class="layer name-screen">
+    <div style="font-size:3.5rem;">📱</div>
+    <h2 class="font-racing" style="font-size:1.2rem; color:var(--cyan);">ACTIVAR VOLANTE</h2>
+    <p class="text-muted" style="text-align:center; line-height:1.7; font-size:0.9rem; max-width:300px;">
+      Para usar el movimiento del celular como volante, necesitamos acceso al giroscopio.
+    </p>
+    <button id="btn-grant-permission" class="btn btn-primary" style="padding:16px 40px;">
+      🔓 &nbsp;Permitir sensores
+    </button>
+    <button id="btn-skip-permission" class="btn btn-secondary btn-sm">
+      Usar botones táctiles
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+  STATE: mobile-selection (Stage 2: choose car & weapon on phone)
+════════════════════════════════════════════════════════════════════════ -->
+<div id="state-mobile-selection" class="ctrl-screen" style="display:none;">
+  <div class="ctrl-loadout-screen">
+    
+    <!-- Top Bar -->
+    <div class="flex-row items-center justify-between w-full" style="justify-content:space-between; max-width:360px;">
+      <span class="font-racing text-cyan" style="font-size:0.9rem;">TU EQUIPAMIENTO</span>
+      <span id="ctrl-player-label" class="badge badge-linked">Piloto</span>
+    </div>
+
+    <!-- Car selection card -->
+    <div class="glass ctrl-car-card">
+      <div style="width:100%; height:110px; position:relative; overflow:hidden; border-radius:10px; background:rgba(0,0,0,0.3); margin-bottom:8px;">
+        <canvas id="ctrl-car-canvas" width="320" height="110" style="width:100%; height:100%; display:block;"></canvas>
+      </div>
+
+      <div class="flex-row items-center justify-between" style="justify-content:space-between; margin-bottom:6px;">
+        <button id="btn-ctrl-car-prev" class="btn btn-secondary btn-sm">◀</button>
+        <div class="flex-col items-center">
+          <span id="ctrl-car-name" class="font-racing text-cyan" style="font-size:1rem; font-weight:700;">Apex Venom</span>
+          <span id="ctrl-car-role" style="font-size:0.68rem; color:var(--text-muted);">Superdeportivo</span>
+        </div>
+        <button id="btn-ctrl-car-next" class="btn btn-secondary btn-sm">▶</button>
+      </div>
+    </div>
+
+    <!-- Weapon selection card -->
+    <div class="glass ctrl-car-card" style="padding:12px 16px;">
+      <span style="font-size:0.65rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; display:block; margin-bottom:4px;">ARMA SELECCIONADA</span>
+      <div class="flex-row items-center justify-between" style="justify-content:space-between;">
+        <button id="btn-ctrl-weapon-prev" class="btn btn-secondary btn-sm">◀</button>
+        <div class="flex-row items-center gap-8">
+          <span id="ctrl-weapon-icon" style="font-size:1.4rem;">⚡</span>
+          <div class="flex-col" style="text-align:left;">
+            <span id="ctrl-weapon-name" class="font-racing" style="font-size:0.85rem; font-weight:700; color:var(--text);">Vulcan MG</span>
+            <span id="ctrl-weapon-ammo" style="font-size:0.65rem; color:var(--cyan);">100 Balas</span>
+          </div>
+        </div>
+        <button id="btn-ctrl-weapon-next" class="btn btn-secondary btn-sm">▶</button>
+      </div>
+    </div>
+
+    <!-- Ready & Go to Controller Buttons -->
+    <div class="flex-col gap-8 w-full items-center">
+      <button id="btn-ctrl-ready" class="btn-ready ctrl-btn-ready">
+        LISTO PARA CORRER
+      </button>
+      <button id="btn-back-to-ctrl" class="btn btn-secondary w-full" style="padding:14px; font-weight:700; border-color:var(--cyan); color:var(--cyan);">
+        🎮 Ir al Volante / Control
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+  STATE: controller  (the actual game controller UI - HORIZONTAL COCKPIT)
+════════════════════════════════════════════════════════════════════════ -->
+<div id="state-controller" class="ctrl-screen ctrl-cockpit" style="display:none;">
+
+  <!-- Speed overlay (big dim number in background) -->
+  <div class="speed-overlay">
+    <span id="speed-number">0</span>
+    <span class="speed-unit">km/h</span>
+  </div>
+
+  <!-- HUD top bar -->
+  <div class="ctrl-hud">
+    <div class="flex-row items-center gap-12">
+      <div>
+        <div class="text-muted" style="font-size:0.6rem; letter-spacing:0.08em;">PILOTO</div>
+        <div id="hud-name" class="text-cyan" style="font-size:0.85rem; font-weight:700; max-width:85px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Piloto</div>
+      </div>
+      <div>
+        <div class="text-muted" style="font-size:0.6rem;">POS</div>
+        <div id="hud-pos" class="hud-value">—</div>
+      </div>
+    </div>
+
+    <!-- Steer bar in center of HUD -->
+    <div class="flex-col items-center">
+      <div class="steer-bar-container">
+        <span class="steer-notch">◀ L</span>
+        <div class="steer-bar">
+          <div class="steer-center-mark"></div>
+          <div id="steer-thumb" class="steer-thumb"></div>
+        </div>
+        <span class="steer-notch">R ▶</span>
+      </div>
+      <div id="steer-deg-display" style="font-size:0.58rem; color:var(--text-muted); font-family:'Orbitron',monospace; letter-spacing:0.08em; margin-top:2px;">
+        VOLANTE: 0°
+      </div>
+    </div>
+
+    <div class="flex-row items-center gap-12">
+      <div style="text-align:center;">
+        <div class="text-muted" style="font-size:0.6rem;">VTA</div>
+        <div id="hud-lap" class="hud-value">—</div>
+      </div>
+      <div style="text-align:center;">
+        <div class="text-muted" style="font-size:0.6rem;">HP</div>
+        <div id="hud-hp" class="hud-value text-cyan">100%</div>
+      </div>
+      <div style="text-align:center;">
+        <div class="text-muted" style="font-size:0.6rem;">BALAS</div>
+        <div id="hud-ammo" class="hud-value text-yellow">—</div>
+      </div>
+      <div style="text-align:center;">
+        <div class="text-muted" style="font-size:0.6rem;">TURBO</div>
+        <div id="hud-turbo" class="hud-value text-pink">100%</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Responsive 3-Column Cockpit Body (Guarantees all buttons are visible and thumb-ergonomic) -->
+  <main class="cockpit-body">
+
+    <!-- LEFT WING: Ergonomic Left Thumb Buttons (DRIFT & FRENAR) -->
+    <div class="cockpit-wing wing-left">
+      <button id="btn-drift" class="ctrl-btn btn-drift" type="button">
+        <span class="btn-icon">⚡</span>
+        <span class="btn-title">DERRAPAR</span>
+        <span class="btn-sub">DRIFT</span>
+      </button>
+
+      <button id="btn-brake" class="ctrl-btn btn-brake" type="button">
+        <span class="btn-icon">🛑</span>
+        <span class="btn-title">FRENAR</span>
+        <span class="btn-sub">REVERSA</span>
+      </button>
+    </div>
+
+    <!-- CENTER COCKPIT: Instrument Cluster & Tilt Level Horizon -->
+    <div class="cockpit-center">
+      
+      <!-- Digital Inclinometer / Horizon Level (reflects phone physical tilt) -->
+      <div class="cockpit-dashboard">
+        <!-- Big Digital Speedometer -->
+        <div class="speed-cluster">
+          <div id="hud-speed-val" class="speed-number">0</div>
+          <div class="speed-unit">KM/H</div>
+        </div>
+
+        <!-- Dynamic Horizon Tilt Level Bar -->
+        <div class="tilt-horizon-wrapper">
+          <div class="horizon-ring">
+            <!-- Center Crosshair -->
+            <div class="crosshair-center"></div>
+            <!-- Tilting Horizon Line -->
+            <div id="horizon-line" class="horizon-line">
+              <div class="horizon-arrow-left">◀</div>
+              <div class="horizon-bar"></div>
+              <div class="horizon-arrow-right">▶</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Steering Degrees Readout -->
+        <div id="steer-deg-display" class="steer-degrees-readout">0°</div>
+      </div>
+
+      <!-- Gyro Status Badge -->
+      <div class="gyro-status-badge">
+        <span class="gyro-dot"></span>
+        <span id="gyro-status-text">GIRA EL CELULAR HACIA LOS LADOS</span>
+      </div>
+      <div id="sensor-diag" style="font-size:0.55rem; color:#888; font-family:monospace; margin-top:2px;">
+        📡 SENSOR: INICIANDO…
+      </div>
+
+      <!-- Quick utility controls -->
+      <div class="ctrl-util-bar">
+        <button id="btn-calibrate" class="btn btn-secondary btn-sm" type="button" title="Calibrar volante (posición neutral)">
+          ⌖ Calibrar
+        </button>
+        <button id="btn-invert" class="btn btn-secondary btn-sm" type="button" title="Invertir dirección de giro">
+          ⇄ Invertir
+        </button>
+        <button id="btn-sensitivity" class="btn btn-secondary btn-sm" type="button" title="Sensibilidad del giro">
+          ⚡ Normal
+        </button>
+        <button id="btn-toggle-garage" class="btn btn-secondary btn-sm" type="button" style="border-color:var(--cyan); color:var(--cyan);">
+          🏎️ Garaje
+        </button>
+      </div>
+
+    </div>
+
+    <!-- RIGHT WING: Ergonomic Right Thumb Buttons (DISPARAR & ACELERAR) -->
+    <div class="cockpit-wing wing-right">
+      <button id="btn-fire" class="ctrl-btn btn-fire" type="button">
+        <span class="btn-icon">🎯</span>
+        <span class="btn-title">DISPARAR</span>
+        <span id="btn-fire-weapon" class="btn-sub">ARMA</span>
+      </button>
+
+      <button id="btn-accel" class="ctrl-btn btn-accel" type="button">
+        <span class="btn-icon">🚀</span>
+        <span class="btn-title">ACELERAR</span>
+        <span class="btn-sub">GAS</span>
+      </button>
+    </div>
+
+  </main>
+
+  <!-- Restore / Respawn button (appears when stuck) -->
+  <button id="btn-restore" class="btn-restore hidden" type="button">
+    ↺ RESTAURAR
+  </button>
+
+  <!-- Reconnecting overlay -->
+  <div id="reconnect-overlay" class="gyro-permission hidden">
+    <div class="spinner"></div>
+    <h2 class="font-racing" style="font-size:1.1rem; color:var(--yellow);">RECONECTANDO…</h2>
+    <p class="text-muted" style="font-size:0.85rem;">Recuperando tu partida</p>
+  </div>
+
+</div>
+
+</div><!-- /#ctrl-viewport -->
+
+<!-- ─── Scripts ──────────────────────────────────────────────────────────── -->
+<script src="/shared/constants.js?v=8"></script>
+<script src="/config/cars.js"></script>
+<script src="/config/weapons.js"></script>
+<script src="/js/renderCar.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/controller.js?v=10"></script>
+</body>
+</html>
