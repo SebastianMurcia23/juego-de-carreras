@@ -42,6 +42,7 @@ const S = {
   selectedCarIndex:    0,
   selectedWeaponId:    'vulcan_mg',
   isReady:             false,
+  isFinished:          false,
   // Gyro / Motion
   hasGyro:         false,
   gyroGranted:     false,
@@ -108,6 +109,26 @@ function initMobileSelectionUI() {
     if (weaponCards.length > 1) weaponCards[1].style.display = 'none';
   }
 
+  const nameInput = $('ctrl-input-nickname');
+  if (nameInput) {
+    const savedName = localStorage.getItem('rr_pilot_name') || S.playerName || '';
+    if (!nameInput.value || nameInput.value === 'Piloto') {
+      nameInput.value = savedName;
+    }
+    const validate = () => {
+      const val = (nameInput.value || '').trim();
+      const isValid = val.length >= 1 && val.length <= 20;
+      const btnReady = $('btn-ctrl-ready');
+      if (btnReady && !S.isReady) {
+        btnReady.disabled = !isValid;
+        btnReady.style.opacity = isValid ? '1' : '0.45';
+        btnReady.style.pointerEvents = isValid ? 'auto' : 'none';
+      }
+    };
+    nameInput.oninput = validate;
+    validate();
+  }
+
   updateMobileCarDisplay();
   if (!ARCADE) updateMobileWeaponDisplay();
 }
@@ -146,6 +167,11 @@ function updateConfirmationUI() {
   const badge = $('ctrl-confirmed-badge');
   const prevBtn = $('btn-ctrl-car-prev');
   const nextBtn = $('btn-ctrl-car-next');
+  const nameInput = $('ctrl-input-nickname');
+
+  if (nameInput) {
+    nameInput.disabled = S.isReady;
+  }
 
   if (S.isReady) {
     if (btnReady) {
@@ -153,6 +179,9 @@ function updateConfirmationUI() {
       btnReady.innerHTML = '✓ Vehículo Confirmado';
       btnReady.style.background = '#00f5d4';
       btnReady.style.color = '#000';
+      btnReady.disabled = false;
+      btnReady.style.opacity = '1';
+      btnReady.style.pointerEvents = 'auto';
     }
     if (btnUnlock) btnUnlock.classList.remove('hidden');
     if (badge) badge.classList.remove('hidden');
@@ -169,6 +198,15 @@ function updateConfirmationUI() {
     if (badge) badge.classList.add('hidden');
     if (prevBtn) { prevBtn.disabled = false; prevBtn.style.opacity = ''; prevBtn.style.pointerEvents = ''; }
     if (nextBtn) { nextBtn.disabled = false; nextBtn.style.opacity = ''; nextBtn.style.pointerEvents = ''; }
+    if (nameInput) {
+      const val = (nameInput.value || '').trim();
+      const isValid = val.length >= 1 && val.length <= 20;
+      if (btnReady) {
+        btnReady.disabled = !isValid;
+        btnReady.style.opacity = isValid ? '1' : '0.45';
+        btnReady.style.pointerEvents = isValid ? 'auto' : 'none';
+      }
+    }
   }
 }
 
@@ -196,12 +234,24 @@ function selectMobileWeapon(delta) {
 
 function toggleMobileReady() {
   if (!S.isReady) {
-    // Confirm vehicle
-    syncLoadoutToServer();
+    const nameInput = $('ctrl-input-nickname');
+    const name = ((nameInput ? nameInput.value : '') || S.playerName || '').trim();
+    if (!name || name.length > 20) {
+      toast('Por favor escribe tu apodo de piloto (1 a 20 letras)', 'error', 2500);
+      if (nameInput) nameInput.focus();
+      return;
+    }
+    S.playerName = name;
+    localStorage.setItem('rr_pilot_name', name);
+    $('ctrl-player-label').textContent = name;
+    $('hud-name').textContent = name;
+
+    // Confirm vehicle & name
+    syncLoadoutToServer(name);
     S.isReady = true;
     updateConfirmationUI();
     if (S.socket && S.seatToken) {
-      S.socket.emit(EV.TOGGLE_READY, { seatToken: S.seatToken, isReady: true });
+      S.socket.emit(EV.TOGGLE_READY, { seatToken: S.seatToken, isReady: true, name });
     }
     toast('✓ ¡Vehículo confirmado!', 'success', 2000);
   } else {
@@ -219,16 +269,18 @@ function unlockMobileVehicle() {
   toast('Vehículo desbloqueado. Puedes cambiarlo.', 'info', 1800);
 }
 
-function syncLoadoutToServer() {
+function syncLoadoutToServer(optName) {
   if (!S.socket || !S.seatToken) return;
   const car = CARS[S.selectedCarIndex];
   if (!car) return;
   const ARCADE = Boolean(window.ROAD_RUMBLE_FLAGS && window.ROAD_RUMBLE_FLAGS.ARCADE_ITEMS !== false);
+  const name = optName || ($('ctrl-input-nickname')?.value || S.playerName || '').trim();
 
   S.socket.emit(EV.SELECT_LOADOUT, {
     seatToken: S.seatToken,
     carId: car.id,
     weaponId: ARCADE ? null : S.selectedWeaponId,
+    name: name || undefined,
   });
 }
 
@@ -258,6 +310,7 @@ function getOrientationAngle() {
  * rawAngle: degrees of lateral tilt (positive = steer right, negative = steer left).
  */
 function processSensorTilt(rawAngle, source) {
+  if (S.isFinished) return;
   S.sensorEventCount = (S.sensorEventCount || 0) + 1;
 
   // Calibrated angle (baseline defaults to 0 = level)
@@ -555,6 +608,7 @@ function releaseAllTouchButtons() {
 }
 
 function sendInputNow() {
+  if (S.isFinished) return;
   if (!S.socket || !S.socket.connected || !S.seatToken) return;
   S.socket.emit(EV.CONTROLLER_INPUT, {
     seatToken: S.seatToken,
@@ -669,7 +723,14 @@ function initSocket() {
     }
   });
 
-  socket.on(EV.LOADOUT_UPDATED, ({ carId, weaponId }) => {
+  socket.on(EV.LOADOUT_UPDATED, ({ carId, weaponId, name }) => {
+    if (name) {
+      S.playerName = name;
+      localStorage.setItem('rr_pilot_name', name);
+      if ($('ctrl-input-nickname')) $('ctrl-input-nickname').value = name;
+      $('ctrl-player-label').textContent = name;
+      $('hud-name').textContent = name;
+    }
     if (carId) {
       const idx = CARS.findIndex(c => c.id === carId);
       if (idx !== -1) S.selectedCarIndex = idx;
@@ -679,12 +740,24 @@ function initSocket() {
     updateMobileWeaponDisplay();
   });
 
-  socket.on('ready_state_changed', ({ isReady }) => {
+  socket.on('ready_state_changed', ({ isReady, name }) => {
     S.isReady = Boolean(isReady);
+    if (name) {
+      S.playerName = name;
+      localStorage.setItem('rr_pilot_name', name);
+      if ($('ctrl-input-nickname')) $('ctrl-input-nickname').value = name;
+      $('ctrl-player-label').textContent = name;
+      $('hud-name').textContent = name;
+    }
     updateConfirmationUI();
   });
 
   socket.on(EV.GAME_STARTING, ({ countdownSeconds }) => {
+    S.isFinished = false;
+    const finishedOverlay = $('ctrl-finished-overlay');
+    if (finishedOverlay) finishedOverlay.classList.add('hidden');
+    const wrongWayBanner = $('ctrl-wrong-way-banner');
+    if (wrongWayBanner) wrongWayBanner.classList.add('hidden');
     toast(`🏁 ¡CARRERA EN ${countdownSeconds}s!`, 'success', 4000);
     const resultsOverlay = $('ctrl-results-overlay');
     if (resultsOverlay) resultsOverlay.classList.add('hidden');
@@ -693,8 +766,42 @@ function initSocket() {
 
   socket.on(EV.CAR_FINISHED, (data) => {
     if (data && data.seatToken === S.seatToken) {
+      S.isFinished = true;
+      S.inputs.steer = 0;
+      S.inputs.accel = false;
+      S.inputs.brake = false;
+      S.inputs.drift = false;
+      S.inputs.fire = false;
       if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 200]);
+
+      const finishedOverlay = $('ctrl-finished-overlay');
+      if (finishedOverlay) {
+        finishedOverlay.classList.remove('hidden');
+        const titleEl = $('ctrl-finished-title');
+        const msgEl = $('ctrl-finished-msg');
+        if (titleEl) titleEl.textContent = `¡TERMINASTE EN EL PUESTO P${data.place}!`;
+        if (msgEl) msgEl.textContent = `Tiempo: ${(data.time / 1000).toFixed(1)}s`;
+      }
       toast(`🏁 ¡Terminaste en el puesto P${data.place}! (Modo espectador)`, 'success', 6000);
+    }
+  });
+
+  socket.on(EV.WRONG_WAY_WARNING, (data) => {
+    if (data && data.seatToken === S.seatToken) {
+      const banner = $('ctrl-wrong-way-banner');
+      const secEl = $('ctrl-wrong-way-seconds');
+      if (banner) banner.classList.remove('hidden');
+      if (secEl) secEl.textContent = data.secondsLeft;
+      if (navigator.vibrate && data.secondsLeft % 2 === 1) {
+        navigator.vibrate([180, 80, 180]);
+      }
+    }
+  });
+
+  socket.on(EV.WRONG_WAY_CLEARED, (data) => {
+    if (data && data.seatToken === S.seatToken) {
+      const banner = $('ctrl-wrong-way-banner');
+      if (banner) banner.classList.add('hidden');
     }
   });
 

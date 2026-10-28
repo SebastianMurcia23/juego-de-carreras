@@ -190,7 +190,7 @@ class ItemSystem {
    * Returns false if nothing happened, or the item string if collected.
    */
   tryCollectBox(car) {
-    if (!car.alive) return false;
+    if (!car.alive || car.finished) return false;
     // Already has item or rolling
     if (car.arcadeItem || car.arcadeRollEnd > this.tickCount) return false;
 
@@ -232,7 +232,7 @@ class ItemSystem {
   activateItem(car) {
     if (!car.arcadeItem) return false;
     if (this.tickCount < car.arcadeRollEnd) return false; // too early
-    if (!car.alive) return false;
+    if (!car.alive || car.finished) return false;
 
     const item = car.arcadeItem;
     car.arcadeItem = null;
@@ -520,7 +520,7 @@ class ItemSystem {
       // Continuous collision detection (CCD) with sweep against cars
       const hitR = this.L * DISC_HIT_DIST;
       for (const [, car] of this.cars) {
-        if (!car.alive) continue;
+        if (!car.alive || car.finished) continue;
         if (car.seatToken === d.owner && this.tickCount < d.immuneEnd) continue;
         const dist = pointToSegmentDistance(car.x, car.y, prevX, prevY, d.x, d.y);
         if (dist < hitR) {
@@ -628,7 +628,7 @@ class ItemSystem {
       // 5. Continuous collision detection (CCD) with sweep against cars
       const hitR = this.L * MISS_HIT_DIST;
       for (const [, car] of this.cars) {
-        if (!car.alive) continue;
+        if (!car.alive || car.finished) continue;
         if (car.seatToken === m.owner && this.tickCount < m.immuneEnd) continue;
         const dist = pointToSegmentDistance(car.x, car.y, prevX, prevY, m.x, m.y);
         if (dist < hitR) {
@@ -652,7 +652,7 @@ class ItemSystem {
 
       // Hit detection
       for (const [, car] of this.cars) {
-        if (!car.alive) continue;
+        if (!car.alive || car.finished) continue;
         if (car.seatToken === o.owner && this.tickCount < o.immuneEnd) continue;
         const dx = car.x - o.x;
         const dy = car.y - o.y;

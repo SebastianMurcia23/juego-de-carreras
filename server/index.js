@@ -220,9 +220,9 @@ io.on('connection', (socket) => {
   });
 
   /* ── Stage 2: Loadout selection (car & weapon) ────────────────────────── */
-  socket.on(EV.SELECT_LOADOUT, ({ seatToken, carId, weaponId } = {}) => {
+  socket.on(EV.SELECT_LOADOUT, ({ seatToken, carId, weaponId, name } = {}) => {
     try {
-      const res = rooms.selectLoadout(seatToken, carId, weaponId);
+      const res = rooms.selectLoadout(seatToken, carId, weaponId, name);
       if (res.error) socket.emit(EV.ERROR, { message: res.error });
     } catch (e) {
       console.error('[select_loadout]', e);
@@ -230,9 +230,9 @@ io.on('connection', (socket) => {
   });
 
   /* ── Stage 2: Toggle Ready state ──────────────────────────────────────── */
-  socket.on(EV.TOGGLE_READY, ({ seatToken, isReady } = {}) => {
+  socket.on(EV.TOGGLE_READY, ({ seatToken, isReady, name } = {}) => {
     try {
-      const res = rooms.toggleReady(seatToken, isReady);
+      const res = rooms.toggleReady(seatToken, isReady, name);
       if (res.error) socket.emit(EV.ERROR, { message: res.error });
     } catch (e) {
       console.error('[toggle_ready]', e);

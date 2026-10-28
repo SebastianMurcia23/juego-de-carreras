@@ -79,6 +79,10 @@ SHARED.EVENTS = {
   ITEM_BLOCKED:       'item_blocked',     // server → all: { seatToken, item }
   ITEM_SETTINGS:      'item_settings',    // server → all: { itemDistribution }
 
+  // Wrong-way orientation warnings
+  WRONG_WAY_WARNING:  'wrong_way_warning',  // server → seat/all: { seatToken, secondsLeft }
+  WRONG_WAY_CLEARED:  'wrong_way_cleared',  // server → seat/all: { seatToken }
+
   // Generic error
   ERROR:              'error',
 };

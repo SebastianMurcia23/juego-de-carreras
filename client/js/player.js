@@ -424,6 +424,22 @@ function initSocket() {
     }
   });
 
+  socket.on(EV.WRONG_WAY_WARNING, (data) => {
+    if (data && data.seatToken === S.seatToken) {
+      if (window.GAME_RENDERER && window.GAME_RENDERER.setWrongWay) {
+        window.GAME_RENDERER.setWrongWay(data.secondsLeft);
+      }
+    }
+  });
+
+  socket.on(EV.WRONG_WAY_CLEARED, (data) => {
+    if (data && data.seatToken === S.seatToken) {
+      if (window.GAME_RENDERER && window.GAME_RENDERER.clearWrongWay) {
+        window.GAME_RENDERER.clearWrongWay();
+      }
+    }
+  });
+
   socket.on(EV.PLAYER_KICKED, ({ message }) => {
     $('error-msg').textContent = message || 'Has sido expulsado de la sala.';
     showState('error');

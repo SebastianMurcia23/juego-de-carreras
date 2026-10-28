@@ -31,6 +31,14 @@ function pointToSegmentDistance(px, py, ax, ay, bx, by) {
   return Math.hypot(px - closestX, py - closestY);
 }
 
+function segmentsIntersect(a1x, a1y, a2x, a2y, b1x, b1y, b2x, b2y) {
+  function ccw(p1x, p1y, p2x, p2y, p3x, p3y) {
+    return (p3y - p1y) * (p2x - p1x) > (p2y - p1y) * (p3x - p1x);
+  }
+  return ccw(a1x, a1y, b1x, b1y, b2x, b2y) !== ccw(a2x, a2y, b1x, b1y, b2x, b2y) &&
+         ccw(a1x, a1y, a2x, a2y, b1x, b1y) !== ccw(a1x, a1y, a2x, a2y, b2x, b2y);
+}
+
 class GameRoom {
   /**
    * @param {object}   io          - Socket.IO server instance
@@ -49,6 +57,7 @@ class GameRoom {
     // Generate track
     const trackConfig = this._findTrack(this.settings.trackId);
     this.track = generateTrack(trackConfig, roomData.seats.size);
+    this._initTrackMetrics();
 
     // Initialize car states from seats
     this.cars = new Map(); // seatToken → carState
@@ -125,9 +134,18 @@ class GameRoom {
         frenzyUntil: 0,
         lastBoostPadTick: 0,
 
-        // Race progress
+        // Race progress & orientation tracking
         currentCP:     0,      // next checkpoint index to pass
         lap:           0,      // completed laps
+        passedCPCountInLap: 0, // checkpoints passed in current lap
+        lastValidCP:   0,      // last confirmed valid checkpoint passed in order
+        trackProgress: 0,      // scalar distance along track (lap * trackLen + dist)
+        closestSegIdx: 0,      // closest centerline segment index
+        wrongWayTicks: 0,      // ticks spent facing/moving wrong way
+        correctWayTicks: 0,    // ticks spent moving correctly
+        wrongWayActive: false, // whether wrong-way warning is active
+        lastWarnedSeconds: null, // last countdown second broadcasted
+        navCP:         0,      // visual navigation waypoint for autopilot once finished
         finished:      false,
         finishTime:    0,
         finishPlace:   0,
@@ -285,6 +303,7 @@ class GameRoom {
     const car = this.cars.get(seatToken);
     if (!car) return;
     if (this.state !== 'racing') return;
+    if (car.finished) return; // Autopilot in effect; manual controls ignored
     const hasSteerSequence = Number.isFinite(inputs.steerSeq);
     if (!hasSteerSequence || inputs.steerSeq > car.steerSeq) {
       car.input.steer = Math.max(-1, Math.min(1, Number(inputs.steer) || 0));
@@ -308,6 +327,7 @@ class GameRoom {
   setSteer(seatToken, steer, steerSeq) {
     const car = this.cars.get(seatToken);
     if (!car) return;
+    if (car.finished) return;
     const sequence = Number(steerSeq);
     if (Number.isFinite(sequence) && sequence <= car.steerSeq) return;
     car.input.steer = Math.max(-1, Math.min(1, Number(steer) || 0));
@@ -348,6 +368,7 @@ class GameRoom {
         car.previousX = car.x;
         car.previousY = car.y;
         this._updateCar(car, dt);
+        this._updateTrackProgressAndOrientation(car, dt);
         this._checkCheckpoints(car);
         if (!ARCADE) this._handleFiring(car);
         // Arcade: try box collection
@@ -380,6 +401,27 @@ class GameRoom {
       arcadeSpeedMult = mod.speedMult;
       arcadeStunned   = mod.stunned;
     }
+    // If car has crossed finish line and finished race, engage autopilot
+    if (car.finished) {
+      if (car.navCP == null) car.navCP = car.currentCP;
+      const targetCP = this.track.checkpoints[car.navCP] || this.track.checkpoints[0];
+      const distToNav = Math.hypot(targetCP.x - car.x, targetCP.y - car.y);
+      if (distToNav < 85) {
+        car.navCP = (car.navCP + 1) % this.track.numCheckpoints;
+      }
+      const nextTarget = this.track.checkpoints[car.navCP] || this.track.checkpoints[0];
+      const targetAngle = Math.atan2(nextTarget.y - car.y, nextTarget.x - car.x);
+      let angleDiff = targetAngle - car.angle;
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+      car.input.steer = Math.max(-1, Math.min(1, angleDiff * 1.8));
+      car.input.accel = car.speed < 185;
+      car.input.brake = car.speed > 200;
+      car.input.fire  = false;
+      car.input.drift = false;
+      car.input.power = false;
+    }
+
     const input = car.input;
 
     // Get terrain at car position
@@ -750,32 +792,278 @@ class GameRoom {
     }
   }
 
-  /* ── Checkpoint & Lap tracking ────────────────────────────────────────── */
+  /* ── Track metrics and full-width gates initialization ─────────────────── */
+  _initTrackMetrics() {
+    const cps = this.track && this.track.checkpoints ? this.track.checkpoints : [];
+    const n = cps.length;
+    this.track.numCheckpoints = n;
+    this.track.segmentLengths = new Float64Array(n);
+    this.track.cumulativeDistances = new Float64Array(n + 1);
+    this.track.gates = [];
+
+    const roadHW = (this.track.roadHalfWidth || PHY.ROAD_HALF_WIDTH);
+    // Gate half-width with 30% margin ensures even cars on curbs/shoulders are registered
+    const gateHW = roadHW * 1.30;
+
+    let totalDist = 0;
+    this.track.cumulativeDistances[0] = 0;
+
+    for (let i = 0; i < n; i++) {
+      const a = cps[i];
+      const b = cps[(i + 1) % n];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const segLen = Math.hypot(dx, dy) || 1;
+      this.track.segmentLengths[i] = segLen;
+      totalDist += segLen;
+      this.track.cumulativeDistances[i + 1] = totalDist;
+
+      const angle = a.angle != null ? a.angle : Math.atan2(dy, dx);
+      const nx = -Math.sin(angle);
+      const ny = Math.cos(angle);
+      const tx = Math.cos(angle);
+      const ty = Math.sin(angle);
+
+      this.track.gates.push({
+        index: i,
+        x: a.x,
+        y: a.y,
+        angle,
+        tx,
+        ty,
+        nx,
+        ny,
+        hw: gateHW,
+        p1: { x: a.x - nx * gateHW, y: a.y - ny * gateHW },
+        p2: { x: a.x + nx * gateHW, y: a.y + ny * gateHW },
+      });
+    }
+
+    this.track.totalCenterlineLength = totalDist;
+  }
+
+  /* ── Track Progress & Wrong-way orientation detection ─────────────────── */
+  _updateTrackProgressAndOrientation(car, dt) {
+    if (car.finished || this.state !== 'racing') return;
+
+    const cps = this.track.checkpoints;
+    const n = this.track.numCheckpoints;
+    if (!cps || n === 0) return;
+
+    const segLens = this.track.segmentLengths;
+    const cumDists = this.track.cumulativeDistances;
+    const totalLen = this.track.totalCenterlineLength;
+
+    // 1. Local search for closest centerline segment around car.currentCP (strictly local [-2, +1] to avoid hairpin jumps)
+    let bestDistSq = Infinity;
+    let bestSegIdx = (car.currentCP - 1 + n) % n;
+    let bestT = 0;
+
+    for (let offset = -2; offset <= 1; offset++) {
+      const i = (car.currentCP + offset + n * 2) % n;
+      const a = cps[i];
+      const b = cps[(i + 1) % n];
+      const abx = b.x - a.x;
+      const aby = b.y - a.y;
+      const lenSq = segLens[i] * segLens[i];
+      if (lenSq <= 0) continue;
+
+      const t = Math.max(0, Math.min(1, ((car.x - a.x) * abx + (car.y - a.y) * aby) / lenSq));
+      const px = a.x + abx * t;
+      const py = a.y + aby * t;
+      const dx = car.x - px;
+      const dy = car.y - py;
+      const dSq = dx * dx + dy * dy;
+      if (dSq < bestDistSq) {
+        bestDistSq = dSq;
+        bestSegIdx = i;
+        bestT = t;
+      }
+    }
+
+    car.closestSegIdx = bestSegIdx;
+    const currentDistAlongTrack = cumDists[bestSegIdx] + bestT * segLens[bestSegIdx];
+    const prevProgress = car.trackProgress || 0;
+    const newProgress = car.lap * totalLen + currentDistAlongTrack;
+    car.trackProgress = newProgress;
+    const deltaProgress = newProgress - prevProgress;
+
+    // 2. Wrong-way detection
+    const a = cps[bestSegIdx];
+    const b = cps[(bestSegIdx + 1) % n];
+    const segLen = segLens[bestSegIdx] || 1;
+    const tx = (b.x - a.x) / segLen;
+    const ty = (b.y - a.y) / segLen;
+
+    const fx = Math.cos(car.angle);
+    const fy = Math.sin(car.angle);
+    const facingDot = fx * tx + fy * ty;
+
+    const moveDot = car.speed > 5
+      ? (car.vx * tx + car.vy * ty) / car.speed
+      : facingDot;
+
+    // Filter out race start (<3.0s), low speed (<35 px/s), and finished cars
+    const canCheckWrongWay = this.elapsedTime > 3.0 && car.speed > 35 && !car.finished;
+
+    // Sustained movement against track tangent while losing progress
+    const isMovingWrongWay = canCheckWrongWay && (
+      (moveDot < -0.3 && deltaProgress <= 1.0) ||
+      (facingDot < -0.4 && moveDot < -0.1)
+    );
+
+    if (isMovingWrongWay) {
+      car.wrongWayTicks = (car.wrongWayTicks || 0) + 1;
+      car.correctWayTicks = 0;
+
+      // Hysteresis: warning appears after ~1.0s (30 ticks) of sustained wrong-way driving
+      if (car.wrongWayTicks >= 30) {
+        car.wrongWayActive = true;
+        const countdownTicks = car.wrongWayTicks - 30;
+        // 5 seconds countdown = 150 ticks
+        const secondsLeft = Math.max(0, Math.ceil((150 - countdownTicks) / PHY.TICK_RATE_HZ));
+
+        if (car.lastWarnedSeconds !== secondsLeft) {
+          car.lastWarnedSeconds = secondsLeft;
+          this.io.to(this.roomCode).emit(SHARED.EVENTS.WRONG_WAY_WARNING, {
+            seatToken: car.seatToken,
+            secondsLeft,
+          });
+        }
+
+        // 5 seconds expired without correction: respawn safely
+        if (countdownTicks >= 150) {
+          this._respawnWrongWayCar(car);
+        }
+      }
+    } else {
+      car.correctWayTicks = (car.correctWayTicks || 0) + 1;
+      // After ~0.66s (20 ticks) of correct driving, clear warning
+      if (car.correctWayTicks >= 20) {
+        if (car.wrongWayActive) {
+          car.wrongWayActive = false;
+          car.lastWarnedSeconds = null;
+          this.io.to(this.roomCode).emit(SHARED.EVENTS.WRONG_WAY_CLEARED, {
+            seatToken: car.seatToken,
+          });
+        }
+        car.wrongWayTicks = 0;
+      }
+    }
+  }
+
+  /* ── Safe respawn on wrong-way timeout ─────────────────────────────────── */
+  _respawnWrongWayCar(car) {
+    const n = this.track.numCheckpoints;
+    const lastCPIdx = car.lastValidCP != null
+      ? car.lastValidCP
+      : ((car.currentCP - 1 + n) % n);
+    const cp = this.track.checkpoints[lastCPIdx] || this.track.checkpoints[0];
+
+    let spawnX = cp.x;
+    let spawnY = cp.y;
+
+    // Check overlap with active cars: displace laterally if crowded
+    const roadHW = this.track.roadHalfWidth || PHY.ROAD_HALF_WIDTH;
+    const nx = -Math.sin(cp.angle || 0);
+    const ny = Math.cos(cp.angle || 0);
+    for (const [, other] of this.cars) {
+      if (other !== car && Math.hypot(other.x - spawnX, other.y - spawnY) < 40) {
+        spawnX += nx * Math.min(28, roadHW * 0.4);
+        spawnY += ny * Math.min(28, roadHW * 0.4);
+        break;
+      }
+    }
+
+    car.x = spawnX;
+    car.y = spawnY;
+    car.previousX = spawnX;
+    car.previousY = spawnY;
+    car.angle = cp.angle || 0;
+    car.vx = 0;
+    car.vy = 0;
+    car.speed = 0;
+    car.angularVel = 0;
+    car.steerAngle = 0;
+
+    // Clear wrong way state
+    car.wrongWayActive = false;
+    car.wrongWayTicks = 0;
+    car.correctWayTicks = 0;
+    car.lastWarnedSeconds = null;
+    this.io.to(this.roomCode).emit(SHARED.EVENTS.WRONG_WAY_CLEARED, {
+      seatToken: car.seatToken,
+    });
+
+    // Short invulnerability & clear stuns
+    car.invulnUntil = this.tickCount + Math.floor(PHY.TICK_RATE_HZ * 1.5);
+    car.slowUntil = 0;
+    car.arcadeStunEnd = 0;
+  }
+
+  /* ── Test crossing of full-width gate in forward direction ────────────── */
+  _testGateCrossing(prevX, prevY, currX, currY, gate) {
+    if (!gate) return false;
+
+    const mvX = currX - prevX;
+    const mvY = currY - prevY;
+    const fwdMove = mvX * gate.tx + mvY * gate.ty;
+
+    // 1. Line segment intersection between car movement (prev, curr) and gate line (p1, p2)
+    if (segmentsIntersect(prevX, prevY, currX, currY, gate.p1.x, gate.p1.y, gate.p2.x, gate.p2.y)) {
+      if (fwdMove >= -1.0) return true;
+    }
+
+    // 2. Continuous signed projection onto gate tangent plane
+    const d1 = (prevX - gate.x) * gate.tx + (prevY - gate.y) * gate.ty;
+    const d2 = (currX - gate.x) * gate.tx + (currY - gate.y) * gate.ty;
+    if (d1 <= 4.0 && d2 >= -4.0 && (d2 - d1) > -0.01) {
+      const span = d2 - d1;
+      const t = Math.abs(span) > 1e-6 ? Math.max(0, Math.min(1, -d1 / span)) : 0.5;
+      const crossX = prevX + mvX * t;
+      const crossY = prevY + mvY * t;
+      const latDist = Math.abs((crossX - gate.x) * gate.nx + (crossY - gate.y) * gate.ny);
+      if (latDist <= gate.hw) {
+        return true;
+      }
+    }
+
+    // 3. Proximity fallback to full-width gate segment
+    const distToGateSeg = pointToSegmentDistance(currX, currY, gate.p1.x, gate.p1.y, gate.p2.x, gate.p2.y);
+    if (distToGateSeg < 28 && fwdMove >= -1.0) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /* ── Checkpoint & Lap tracking via full-width gates ───────────────────── */
   _checkCheckpoints(car) {
     if (car.finished) return;
 
-    const cpIdx  = car.currentCP;
-    const cp     = this.track.checkpoints[cpIdx];
-    if (!cp) return;
+    const n = this.track.numCheckpoints;
+    const cpIdx = car.currentCP;
+    const gate = this.track.gates && this.track.gates[cpIdx];
+    if (!gate) return;
 
-    const dx = car.x - cp.x;
-    const dy = car.y - cp.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const segmentDistance = pointToSegmentDistance(
-      cp.x,
-      cp.y,
+    const crossed = this._testGateCrossing(
       car.previousX,
       car.previousY,
       car.x,
-      car.y
+      car.y,
+      gate
     );
 
-    if (Math.min(dist, segmentDistance) < PHY.CHECKPOINT_RADIUS) {
-      car.currentCP = (cpIdx + 1) % this.track.numCheckpoints;
+    if (crossed) {
+      car.lastValidCP = cpIdx;
+      car.currentCP = (cpIdx + 1) % n;
+      car.passedCPCountInLap = (car.passedCPCountInLap || 0) + 1;
 
       // Lap completed when wrapping around to 0
-      if (car.currentCP === 0 && cpIdx > 0) {
+      // after passing all required checkpoints in that lap
+      if (car.currentCP === 0 && cpIdx > 0 && car.passedCPCountInLap >= n) {
         car.lap++;
+        car.passedCPCountInLap = 0;
         console.log(`[game] ${car.name} completed lap ${car.lap}/${this.totalLaps} in ${this.roomCode}`);
 
         // Notify the player
@@ -822,6 +1110,16 @@ class GameRoom {
           });
           console.log(`[game] ${car.name} finished P${car.finishPlace} in ${this.roomCode}`);
         }
+      }
+    } else {
+      // Check for skipped segments: if the car crossed Gate 0 (finish line)
+      // while car.currentCP !== 0 (it missed some checkpoints earlier):
+      const finishGate = this.track.gates && this.track.gates[0];
+      if (finishGate && cpIdx !== 0 && this._testGateCrossing(car.previousX, car.previousY, car.x, car.y, finishGate)) {
+        this.io.to(this.roomCode).emit('toast', {
+          seatToken: car.seatToken,
+          message: `Te saltaste un tramo. Regresa al checkpoint ${cpIdx + 1}`,
+        });
       }
     }
   }
@@ -1017,7 +1315,7 @@ class GameRoom {
 
   /* ── Car-car collisions ───────────────────────────────────────────────── */
   _carCollisions() {
-    const carArr = Array.from(this.cars.values()).filter(c => c.alive);
+    const carArr = Array.from(this.cars.values()).filter(c => c.alive && !c.finished);
     for (let i = 0; i < carArr.length; i++) {
       for (let j = i + 1; j < carArr.length; j++) {
         const a = carArr[i];
@@ -1204,7 +1502,7 @@ class GameRoom {
       }));
       const standings = this._updateStandings(results);
       const trackOrder = this.settings.trackOrder || TRACKS_CONFIG.map(t => t.id);
-      const totalRaces = this.settings.mode === 'championship' ? trackOrder.length : 1;
+      const totalRaces = this.settings.mode === 'championship' ? (this.settings.trackCount || trackOrder.length) : 1;
       const championshipFinished = this.settings.mode !== 'championship' ||
         (this.roomData.championship && this.roomData.championship.raceNumber >= totalRaces - 1);
 
@@ -1278,6 +1576,8 @@ class GameRoom {
         steer:  +car.input.steer.toFixed(2),
         steerAngle: +(car.steerAngle.toFixed(3)),
         firing: Boolean(car.input.fire),
+        ww:    car.wrongWayActive ? (car.lastWarnedSeconds || 5) : 0,
+        ghost: Boolean(car.finished),
       });
     }
 

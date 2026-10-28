@@ -307,6 +307,26 @@
       </select>
     </div>
 
+    <!-- Track count for championship (CAMBIO 5) -->
+    <div id="admin-trackcount-group" class="flex-col gap-4">
+      <label for="admin-select-trackcount" style="font-size:0.75rem; color:var(--text-muted);">CANTIDAD DE PISTAS (CAMPEONATO)</label>
+      <select id="admin-select-trackcount" class="admin-select">
+        <option value="5">5 pistas</option>
+        <option value="10">10 pistas</option>
+        <option value="15">15 pistas</option>
+        <option value="20">20 pistas</option>
+        <option value="25">25 pistas</option>
+        <option value="30">30 pistas</option>
+        <option value="35">35 pistas</option>
+        <option value="40" selected>40 pistas (todas)</option>
+      </select>
+    </div>
+
+    <!-- Championship format summary badge -->
+    <div id="admin-format-summary" style="background:rgba(0,245,212,0.1); border:1px solid var(--cyan); border-radius:8px; padding:6px 12px; font-size:0.8rem; color:var(--cyan); text-align:center; font-weight:700;">
+      🏁 40 pistas × 3 vueltas
+    </div>
+
     <!-- Track Selector -->
     <div class="flex-col gap-4">
       <label for="admin-select-track" style="font-size:0.75rem; color:var(--text-muted);">PISTA INICIAL / SELECCIONADA</label>

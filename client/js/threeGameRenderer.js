@@ -249,6 +249,39 @@
     // 4. Center dashed line
     ribbon(-2.5, 2.5, 0.10, function(i) { return Math.floor(i / 4) % 2 ? white : asph; });
 
+    // Directional chevron arrows along track asphalt (CAMBIO 1.5)
+    var chevTex = (function() {
+      var c = document.createElement('canvas');
+      c.width = 64; c.height = 64;
+      var x = c.getContext('2d');
+      x.clearRect(0, 0, 64, 64);
+      x.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+      x.lineWidth = 10;
+      x.lineCap = 'round';
+      x.lineJoin = 'round';
+      x.beginPath();
+      x.moveTo(14, 46);
+      x.lineTo(32, 18);
+      x.lineTo(50, 46);
+      x.stroke();
+      return new THREE.CanvasTexture(c);
+    })();
+    var chevMat = new THREE.MeshBasicMaterial({
+      map: chevTex,
+      transparent: true,
+      opacity: 0.65,
+      depthWrite: false
+    });
+    var chevGeo = new THREE.PlaneGeometry(HW * 0.45, HW * 0.45).rotateX(-Math.PI / 2);
+    for (var ci = 15; ci < N; ci += 25) {
+      var cp = pts[ci];
+      var ctg = curve.getTangentAt((ci / N) % 1);
+      var cMesh = new THREE.Mesh(chevGeo, chevMat);
+      cMesh.position.set(cp.x, 0.09, cp.z);
+      cMesh.rotation.y = Math.atan2(ctg.x, ctg.z);
+      R.roadGroup.add(cMesh);
+    }
+
     // Start / Finish Line Arch (identical to kart-3d-reference.html)
     var chkTex = makeCheckerboardTexture();
     var t0 = curve.getTangentAt(0);
@@ -282,6 +315,13 @@
     bar.position.y = 85;
     arch.add(bar);
     R.roadGroup.add(arch);
+
+    // Forward directional arrow at start/finish line pointing in race direction
+    var finishArrow = new THREE.Mesh(chevGeo, chevMat);
+    var pStart = pts[3] || pts[0];
+    finishArrow.position.set(pStart.x, 0.12, pStart.z);
+    finishArrow.rotation.y = Math.atan2(t0.x, t0.z);
+    R.roadGroup.add(finishArrow);
 
     // Track bounding box for environment scaling
     var minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
@@ -560,6 +600,7 @@
     R._lastFrameTime = performance.now();
     R.T = 0;
     R._shake = 0;
+    _wrongWaySecondsLeft = 0;
   }
 
   function setTrack(track) {
@@ -785,6 +826,14 @@
     _missileWarnEnd = Date.now() + 3500;
   }
 
+  var _wrongWaySecondsLeft = 0;
+  function showWrongWay(secondsLeft) {
+    _wrongWaySecondsLeft = typeof secondsLeft === 'number' ? secondsLeft : 5;
+  }
+  function clearWrongWay() {
+    _wrongWaySecondsLeft = 0;
+  }
+
   /* ── Arcade Item Socket Events Dispatcher ──────────────────────────────── */
   function handleItemEvent(event, data) {
     if (!data) return;
@@ -828,6 +877,14 @@
         if (myCar && FX && FX.ring) {
           FX.ring(myCar.position, 0xffd54a, 8);
         }
+      }
+    } else if (event === EV.WRONG_WAY_WARNING) {
+      if (!data || data.seatToken === R.seat) {
+        showWrongWay(data ? data.secondsLeft : 5);
+      }
+    } else if (event === EV.WRONG_WAY_CLEARED) {
+      if (!data || data.seatToken === R.seat) {
+        clearWrongWay();
       }
     }
   }
@@ -1530,6 +1587,34 @@
       ctx.fillText('⚠️ ¡MISIL BUSCADOR EN CAMINO! ⚠️', innerWidth / 2, 90);
     }
 
+    // Wrong way warning overlay banner (CAMBIO 1.3)
+    if (_wrongWaySecondsLeft > 0) {
+      ctx.save();
+      var flash = 0.5 + Math.sin(Date.now() / 90) * 0.45;
+      var bannerW = Math.min(480, innerWidth * 0.9);
+      var bannerH = 48;
+      var bx = (innerWidth - bannerW) / 2;
+      var by = 125;
+
+      ctx.fillStyle = 'rgba(230, 57, 70, ' + (0.85 + flash * 0.15) + ')';
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(bx, by, bannerW, bannerH, 10);
+      } else {
+        ctx.rect(bx, by, bannerW, bannerH);
+      }
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 18px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('⚠️ ¡SENTIDO CONTRARIO! Da la vuelta: te quedan ' + _wrongWaySecondsLeft + ' s', innerWidth / 2, by + 30);
+      ctx.restore();
+    }
+
     ctx.textAlign = 'left';
     drawMiniMap(ctx, local);
 
@@ -1823,6 +1908,9 @@
     showToast: showToast,
     showInk: showInk,
     showMissileWarning: showMissileWarning,
+    showWrongWay: showWrongWay,
+    clearWrongWay: clearWrongWay,
+    setWrongWay: showWrongWay,
     handleItemEvent: handleItemEvent,
     setArrival: function(arrival) {
       R.arrivals = R.arrivals || [];

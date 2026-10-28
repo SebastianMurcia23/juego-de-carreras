@@ -196,6 +196,7 @@ class RoomManager {
         mode: 'championship',
         trackId: TRACKS[0]?.id || 'track_01_neon_city',
         trackOrder: TRACKS.map(track => track.id),
+        trackCount: 40,
         laps: 3,
         ammoMultiplier: 1.0,
         friendlyFire: true,
@@ -278,6 +279,30 @@ class RoomManager {
     };
   }
 
+  /* ── Resolve Unique Seat Nickname ────────────────────────────────────── */
+
+  _resolveUniqueName(room, requestedName, currentSeatToken) {
+    let base = (requestedName || '').trim().replace(/<[^>]*>/g, '').slice(0, LIMITS.MAX_NAME_LENGTH);
+    if (!base) base = 'Piloto';
+
+    let name = base;
+    let counter = 2;
+    const isTaken = (testName) => {
+      for (const [sToken, s] of room.seats) {
+        if (sToken !== currentSeatToken && (s.name || '').toLowerCase() === testName.toLowerCase()) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    while (isTaken(name)) {
+      name = `${base} (${counter})`;
+      counter++;
+    }
+    return name;
+  }
+
   /* ── Link mobile to seat ─────────────────────────────────────────────── */
 
   async linkSeat(seatToken, rawName, mobileSocketId) {
@@ -296,7 +321,7 @@ class RoomManager {
       if (existing) return { error: 'SEAT_ALREADY_USED' };
     }
 
-    const name = (rawName || '').trim().slice(0, LIMITS.MAX_NAME_LENGTH) || 'Piloto';
+    const name = this._resolveUniqueName(room, rawName, seatToken);
 
     seat.mobileSocketId = mobileSocketId;
     seat.name           = name;
@@ -334,7 +359,7 @@ class RoomManager {
 
   /* ── Stage 2: Select Loadout (car & weapon) ─────────────────────────── */
 
-  selectLoadout(seatToken, carId, weaponId) {
+  selectLoadout(seatToken, carId, weaponId, rawName) {
     const roomCode = this.seatIndex.get(seatToken);
     if (!roomCode) return { error: 'SEAT_INVALID' };
 
@@ -356,6 +381,9 @@ class RoomManager {
     if (weaponId && WEAPONS.some(w => w.id === weaponId)) {
       seat.weaponId = weaponId;
     }
+    if (rawName && typeof rawName === 'string') {
+      seat.name = this._resolveUniqueName(room, rawName, seatToken);
+    }
 
     // Notify whole room of player update
     this._broadcastPlayers(roomCode);
@@ -363,6 +391,7 @@ class RoomManager {
     // Notify specific seat targets (PC and Mobile)
     const payload = {
       seatToken,
+      name: seat.name,
       carId: seat.carId,
       weaponId: seat.weaponId,
       isReady: seat.isReady,
@@ -380,7 +409,7 @@ class RoomManager {
 
   /* ── Stage 2: Toggle Ready ───────────────────────────────────────────── */
 
-  toggleReady(seatToken, isReady) {
+  toggleReady(seatToken, isReady, rawName) {
     const roomCode = this.seatIndex.get(seatToken);
     if (!roomCode) return { error: 'SEAT_INVALID' };
 
@@ -395,6 +424,10 @@ class RoomManager {
       seat.carId = CARS[0]?.id || 'apex_venom';
     }
 
+    if (rawName && typeof rawName === 'string') {
+      seat.name = this._resolveUniqueName(room, rawName, seatToken);
+    }
+
     seat.isReady = Boolean(isReady);
     seat.state = seat.isReady ? STATES.SEAT.READY : STATES.SEAT.SELECTING;
 
@@ -402,6 +435,7 @@ class RoomManager {
 
     const payload = {
       seatToken,
+      name: seat.name,
       isReady: seat.isReady,
       state: seat.state,
     };
@@ -435,6 +469,14 @@ class RoomManager {
     if (Array.isArray(newSettings.trackOrder) && newSettings.trackOrder.length) {
       const validTracks = newSettings.trackOrder.filter(id => TRACKS.some(track => track.id === id));
       if (validTracks.length) room.settings.trackOrder = validTracks;
+    }
+    if (newSettings.trackCount !== undefined) {
+      const tc = parseInt(newSettings.trackCount, 10);
+      if (Number.isInteger(tc)) {
+        // Enforce multiples of 5, between 5 and 40
+        const clamped = Math.max(5, Math.min(40, Math.round(tc / 5) * 5));
+        room.settings.trackCount = clamped;
+      }
     }
     if (newSettings.laps && Number.isInteger(Number(newSettings.laps))) {
       room.settings.laps = Math.max(1, Math.min(10, parseInt(newSettings.laps, 10)));
@@ -580,11 +622,12 @@ class RoomManager {
 
     room.championship.raceNumber++;
     const trackOrder = room.settings.trackOrder || TRACKS.map(t => t.id);
-    if (room.championship.raceNumber >= trackOrder.length) {
+    const totalAllowed = room.settings.trackCount || trackOrder.length;
+    if (room.championship.raceNumber >= totalAllowed) {
       room.state = 'championship_finished';
       this.io.to(roomCode).emit(EV.CHAMPIONSHIP_FINISHED, {
         standings: finishPayload?.standings || [],
-        totalRaces: trackOrder.length,
+        totalRaces: totalAllowed,
       });
       return { success: true, finished: true };
     }

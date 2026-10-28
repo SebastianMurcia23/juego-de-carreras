@@ -320,6 +320,97 @@ async function runComprehensiveChampionshipVerification() {
 
   console.log('  ✅ RoomManager intermission preparation, background track load, and host skip PASSED.');
 
+  // ── Prompt 3 Verification: Championship Track Count Options & Validation ──
+  console.log('\n🏁 Testing Prompt 3: Championship Track Count Settings (5, 10, clamping 7->5, 45->40)...');
+  roomManager.updateRoomSettings(testRoomCode, testHostToken, { trackCount: 5 });
+  assert.strictEqual(testRoom.settings.trackCount, 5, 'TrackCount should be 5');
+  roomManager.updateRoomSettings(testRoomCode, testHostToken, { trackCount: 10 });
+  assert.strictEqual(testRoom.settings.trackCount, 10, 'TrackCount should be 10');
+  // Clamping test: 7 -> 5 (closest multiple of 5)
+  roomManager.updateRoomSettings(testRoomCode, testHostToken, { trackCount: 7 });
+  assert.strictEqual(testRoom.settings.trackCount, 5, 'TrackCount 7 should clamp/round to 5');
+  // Clamping test: 45 -> 40 (maximum 40)
+  roomManager.updateRoomSettings(testRoomCode, testHostToken, { trackCount: 45 });
+  assert.strictEqual(testRoom.settings.trackCount, 40, 'TrackCount 45 should clamp to 40');
+
+  // Test championship ends at exact trackCount = 5
+  testRoom.settings.trackCount = 5;
+  testRoom.championship.raceNumber = 4; // 5th race index
+  const finishN5 = roomManager.prepareNextChampionshipRace(testRoomCode, { standings: [] });
+  assert.strictEqual(finishN5.finished, true, 'Championship with trackCount=5 must finish after 5th race');
+  assert.strictEqual(testRoom.state, 'championship_finished');
+  console.log('  ✅ Championship N=5 and N=10 track count settings and finish trigger PASSED.');
+
+  // ── Prompt 3 Verification: Finished Car Autopilot & Controls Lock ─────────
+  console.log('\n🚗 Testing Prompt 3: Finished Car Control Locking, Autopilot & Item Exemption...');
+  const sampleTrack = tracks[0];
+  const testRoom2 = {
+    settings: { mode: 'single', trackId: sampleTrack.id, laps: 1, finishTimeoutSeconds: 10 },
+    seats: new Map([
+      ['c1', { token: 'c1', name: 'Carlos', isHost: true, carId: 'apex_venom', weaponId: 'vulcan_mg', isReady: true }],
+      ['c2', { token: 'c2', name: 'Carlos (2)', isHost: false, carId: 'viper_gt', weaponId: 'vulcan_mg', isReady: true }],
+    ]),
+    championship: { raceNumber: 0, standings: new Map() },
+  };
+  const testGame = new GameRoom(fakeIo([]), 'test-finished-rules', testRoom2);
+  testGame.state = 'racing';
+  const c1 = testGame.cars.get('c1');
+  const c2 = testGame.cars.get('c2');
+
+  // Mark c1 finished
+  c1.finished = true;
+  c1.finishPlace = 1;
+  c1.finishTime = 15000;
+  const originalPlace = c1.finishPlace;
+  const originalTime = c1.finishTime;
+
+  // 1. Controls are ignored for finished car
+  testGame.setInput('c1', { accel: true, steer: 1, brake: true, drift: true });
+  assert.strictEqual(c1.input.accel, false, 'Finished car must ignore accelerator input');
+  assert.strictEqual(c1.input.steer, 0, 'Finished car must ignore steering input');
+  assert.strictEqual(c1.finishPlace, originalPlace, 'Finish place must be frozen');
+  assert.strictEqual(c1.finishTime, originalTime, 'Finish time must be frozen');
+
+  // 2. Finished car cannot collect item boxes
+  if (testGame.itemSystem) {
+    // Place a box exactly at c1's position in the itemSystem boxes array
+    if (testGame.itemSystem.boxes.length > 0) {
+      const box = testGame.itemSystem.boxes[0];
+      const savedX = box.x; const savedY = box.y;
+      box.x = c1.x; box.y = c1.y; box.active = true;
+      const collected = testGame.itemSystem.tryCollectBox(c1);
+      assert.strictEqual(collected, false, 'Finished car must NOT collect item boxes');
+      box.x = savedX; box.y = savedY; // restore
+    }
+
+    // 3. Finished car is NOT targeted by seeking missiles
+    // Give c2 a missile item and bypass roulette lockout
+    c2.arcadeItem = 'misil';
+    c2.arcadeRollEnd = 0; // allow immediate activation
+    c2.alive = true;
+    c2.finished = false;
+    c1.s = 0.5; // c1 is ahead of c2 by track position
+    c2.s = 0.1;
+    const missilesBefore = testGame.itemSystem.missiles.length;
+    testGame.itemSystem.activateItem(c2);
+    const newMissile = testGame.itemSystem.missiles[missilesBefore];
+    if (newMissile) {
+      assert.notStrictEqual(newMissile.target, 'c1', 'Missile must NOT target finished car');
+    }
+  }
+
+  // 4. Finished car does not count extra laps
+  const prevLaps = c1.lap;
+  for (let g = 0; g <= testGame.track.numCheckpoints; g++) {
+    testGame._checkCheckpoints(c1);
+  }
+  assert.strictEqual(c1.lap, prevLaps, 'Finished car must NOT increment laps in autopilot');
+
+  // 5. Player names appear cleanly (no internal IDs)
+  assert.strictEqual(c1.name, 'Carlos', 'Driver 1 custom name must be preserved');
+  assert.strictEqual(c2.name, 'Carlos (2)', 'Driver 2 duplicate name resolution must be preserved');
+  console.log('  ✅ Finished car rules, autopilot isolation, and player name checks PASSED.');
+
   console.log('\n🎉 ALL CHAMPIONSHIP & TRACK SWITCH VERIFICATION CHECKS PASSED!\n');
 }
 

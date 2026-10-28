@@ -315,6 +315,17 @@ function initSocket() {
     }
   });
 
+  S.socket.on(EV.WRONG_WAY_WARNING, function(data) {
+    if (window.GAME_RENDERER && window.GAME_RENDERER.handleItemEvent) {
+      window.GAME_RENDERER.handleItemEvent(EV.WRONG_WAY_WARNING, data);
+    }
+  });
+  S.socket.on(EV.WRONG_WAY_CLEARED, function(data) {
+    if (window.GAME_RENDERER && window.GAME_RENDERER.handleItemEvent) {
+      window.GAME_RENDERER.handleItemEvent(EV.WRONG_WAY_CLEARED, data);
+    }
+  });
+
   S.socket.on(EV.LOADOUT_UPDATED, function(data) {
     if (data.carId) {
       var idx = findCarIndex(data.carId);
@@ -856,6 +867,21 @@ function syncAdminFormValues() {
   if (laps)  laps.value  = String(S.settings.laps      || 3);
   if (ammo)  ammo.value  = String(S.settings.ammoMultiplier || 1.0);
   if (idist) idist.value = S.settings.itemDistribution || 'balanced';
+  var trackCount = $('admin-select-trackcount');
+  if (trackCount) trackCount.value = String(S.settings.trackCount || 40);
+  var trackCountG = $('admin-trackcount-group');
+  if (trackCountG) trackCountG.style.display = (S.settings.mode === 'championship') ? '' : 'none';
+
+  var summary = $('admin-format-summary');
+  if (summary) {
+    if (S.settings.mode === 'championship') {
+      summary.style.display = '';
+      summary.textContent = '🏁 ' + (S.settings.trackCount || 40) + ' pistas × ' + (S.settings.laps || 3) + ' vueltas';
+    } else {
+      summary.style.display = 'none';
+    }
+  }
+
   // Toggle visibility: show MUNICIÓN in classic, show DISTRIBUCIÓN in arcade
   var ammoG = $('admin-ammo-group'),  idistG = $('admin-itemdist-group');
   if (ammoG)  ammoG.style.display  = ARCADE_MODE ? 'none' : '';
@@ -867,9 +893,11 @@ function updateAdminSettings() {
   var mode  = $('admin-select-mode')     ? $('admin-select-mode').value                    : S.settings.mode;
   var tid   = $('admin-select-track')    ? $('admin-select-track').value                   : S.settings.trackId;
   var laps  = $('admin-select-laps')     ? parseInt($('admin-select-laps').value, 10)       : S.settings.laps;
+  var trackCount = $('admin-select-trackcount') ? parseInt($('admin-select-trackcount').value, 10) : (S.settings.trackCount || 40);
   var ammo  = $('admin-select-ammo')     ? parseFloat($('admin-select-ammo').value)         : S.settings.ammoMultiplier;
   var idist = $('admin-select-itemdist') ? $('admin-select-itemdist').value                : S.settings.itemDistribution;
-  S.settings = merge(S.settings, { mode: mode, trackId: tid, laps: laps, ammoMultiplier: ammo, itemDistribution: idist });
+  S.settings = merge(S.settings, { mode: mode, trackId: tid, laps: laps, trackCount: trackCount, ammoMultiplier: ammo, itemDistribution: idist });
+  syncAdminFormValues();
   S.socket.emit(EV.UPDATE_SETTINGS, { roomCode: S.roomCode, hostToken: S.hostToken, settings: S.settings });
 }
 
@@ -931,6 +959,7 @@ function wireButtons() {
   if (btnReady) btnReady.addEventListener('click', toggleReady);
 
   var selMode   = $('admin-select-mode');     if (selMode)   selMode.addEventListener('change',   updateAdminSettings);
+  var selTCount = $('admin-select-trackcount');if (selTCount) selTCount.addEventListener('change',  updateAdminSettings);
   var selTrack  = $('admin-select-track');    if (selTrack)  selTrack.addEventListener('change',  updateAdminSettings);
   var selLaps   = $('admin-select-laps');     if (selLaps)   selLaps.addEventListener('change',   updateAdminSettings);
   var selAmmo   = $('admin-select-ammo');     if (selAmmo)   selAmmo.addEventListener('change',   updateAdminSettings);

@@ -147,6 +147,23 @@
       <span style="font-size:0.82rem; color:var(--cyan); line-height:1.4;">Recoge cajas arcoíris en la pista<br>para obtener poderes. Usa el botón <strong>PODER</strong>.</span>
     </div>
 
+    <!-- Pilot Name Card (Obligatorio para confirmar vehículo) -->
+    <div class="glass ctrl-car-card" style="padding:10px 14px; width:100%;">
+      <label for="ctrl-input-nickname" style="font-size:0.72rem; color:var(--text-muted); display:block; margin-bottom:5px; letter-spacing:0.06em; font-weight:700;">
+        ¿CÓMO QUIERES LLAMARTE?
+      </label>
+      <input
+        id="ctrl-input-nickname"
+        class="input"
+        type="text"
+        placeholder="Tu apodo de piloto…"
+        maxlength="20"
+        autocomplete="off"
+        autocorrect="off"
+        spellcheck="false"
+        style="width:100%; text-align:center; font-size:1.05rem; font-weight:600; padding:10px; border-color:var(--cyan);"
+      />
+    </div>
 
     <!-- Ready & Go to Controller Buttons -->
     <div class="flex-col gap-8 w-full items-center">
@@ -171,6 +188,21 @@
   STATE: controller  (the actual game controller UI - HORIZONTAL COCKPIT)
 ════════════════════════════════════════════════════════════════════════ -->
 <div id="state-controller" class="ctrl-screen ctrl-cockpit" style="display:none;">
+
+  <!-- Wrong-Way Warning Banner (Mobile) -->
+  <div id="ctrl-wrong-way-banner" class="hidden" style="position:absolute; top:48px; left:6%; right:6%; z-index:9999; background:rgba(230,57,70,0.96); border:2px solid #fff; border-radius:10px; padding:8px 12px; text-align:center; color:#fff; font-weight:800; font-size:0.85rem; box-shadow:0 0 20px rgba(230,57,70,0.85);">
+    ⚠️ ¡SENTIDO CONTRARIO! Da la vuelta: <span id="ctrl-wrong-way-seconds">5</span> s
+  </div>
+
+  <!-- Finished Car / Autopilot Spectator Overlay (Mobile) -->
+  <div id="ctrl-finished-overlay" class="hidden" style="position:absolute; inset:0; z-index:9998; background:rgba(7,16,29,0.90); backdrop-filter:blur(6px); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:20px; text-align:center;">
+    <div style="font-size:2.8rem; margin-bottom:6px;">🏁</div>
+    <h2 id="ctrl-finished-title" class="font-racing" style="color:var(--yellow); font-size:1.5rem; margin:0 0 6px 0;">¡TERMINASTE!</h2>
+    <div id="ctrl-finished-msg" class="font-racing" style="color:var(--cyan); font-size:1.1rem; margin-bottom:10px;">Puesto P1 · 45.2s</div>
+    <p style="color:var(--text-muted); font-size:0.82rem; max-width:280px; line-height:1.5; margin:0;">
+      Tu carro sigue en piloto automático por la pista.<br>Esperando a que todos los pilotos terminen...
+    </p>
+  </div>
 
   <!-- Speed overlay (big dim number in background) -->
   <div class="speed-overlay">
