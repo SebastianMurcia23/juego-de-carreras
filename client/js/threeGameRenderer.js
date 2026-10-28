@@ -582,6 +582,8 @@
     R.arrivals = [];
     R._stunPrev = {};
     R.state = null;
+    R.results = null;
+    R.intermission = null;
 
     // 4. Build track
     if (ARCADE) {
@@ -1632,6 +1634,41 @@
       drawResultsOverlay(ctx, innerWidth, innerHeight);
     }
 
+    if (R.debugDirection) {
+      drawDirectionDebug(ctx, local);
+    }
+
+    ctx.restore();
+  }
+
+  function drawDirectionDebug(ctx, local) {
+    if (!R.state || !R.state.cars) return;
+    ctx.save();
+    var panelW = 340;
+    var panelH = 34 + R.state.cars.length * 20;
+    ctx.fillStyle = 'rgba(10, 15, 28, 0.88)';
+    ctx.strokeStyle = '#00f0ff';
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(16, 120, panelW, panelH);
+    ctx.strokeRect(16, 120, panelW, panelH);
+
+    ctx.fillStyle = '#00f0ff';
+    ctx.font = 'bold 12px monospace';
+    ctx.fillText('🧭 DEBUG DIRECCIÓN (?debugDir=1)', 24, 138);
+
+    R.state.cars.forEach(function(c, i) {
+      var y = 160 + i * 20;
+      var isMe = local && (c.id === local.id || c.token === local.token || c.st === local.token);
+      ctx.fillStyle = isMe ? '#ffe600' : '#ffffff';
+      ctx.font = '11px monospace';
+      var stateStr = c.ww > 0 ? ('WARN(' + c.ww + 's)') : 'OK';
+      var dotStr = (c.dot !== undefined ? c.dot : 1.0).toFixed(2);
+      var line = (c.name || 'P' + (i + 1)).slice(0, 10).padEnd(10) +
+        ' s:' + String(c.s || 0).padStart(5) +
+        ' dot:' + dotStr.padStart(5) +
+        ' [' + stateStr + ']';
+      ctx.fillText(line, 24, y);
+    });
     ctx.restore();
   }
 
@@ -1648,6 +1685,20 @@
     var oy = y + 8 + (size - 16 - h * scale) / 2;
     ctx.fillStyle = '#07101de0';
     ctx.fillRect(x, y, size, size);
+
+    if (R.debugDirection && R.track.checkpoints) {
+      ctx.save();
+      ctx.fillStyle = '#00ffcc';
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'center';
+      for (var gi = 0; gi < R.track.checkpoints.length; gi += 4) {
+        var gcp = R.track.checkpoints[gi];
+        var gx = ox + (gcp.x - b.minX) * scale;
+        var gy = oy + (gcp.y - b.minY) * scale;
+        ctx.fillText('G' + gi, gx, gy - 2);
+      }
+      ctx.restore();
+    }
     ctx.strokeStyle = '#ffffff55';
     ctx.lineWidth = 2;
     var cps = R.track.checkpoints || [];
@@ -1919,6 +1970,23 @@
       }
     },
     getLocalCar: getLocal,
-    debugScene: window.__rrDebugScene
+    debugScene: window.__rrDebugScene,
+    debugDirection: window.__rrDebugDirection
+  };
+
+  R.debugDirection = false;
+  if (typeof window !== 'undefined' && window.location && window.location.search) {
+    if (window.location.search.indexOf('debugDir=1') !== -1) {
+      R.debugDirection = true;
+    }
+  }
+
+  window.__rrDebugDirection = function(on) {
+    if (on !== undefined) {
+      R.debugDirection = Boolean(on);
+    } else {
+      R.debugDirection = !R.debugDirection;
+    }
+    return R.debugDirection;
   };
 })();

@@ -83,6 +83,10 @@ SHARED.EVENTS = {
   WRONG_WAY_WARNING:  'wrong_way_warning',  // server → seat/all: { seatToken, secondsLeft }
   WRONG_WAY_CLEARED:  'wrong_way_cleared',  // server → seat/all: { seatToken }
 
+  // Phase synchronization (Prompt 4)
+  PHASE_CHANGED:      'phase_changed',      // server → all: { phase, raceId, trackId, ... }
+  RACE_STATE_SYNC:    'race_state_sync',    // server → seat/all: { phase, raceId, isFinished, ... }
+
   // Generic error
   ERROR:              'error',
 };

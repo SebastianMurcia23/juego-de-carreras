@@ -150,7 +150,7 @@ function generateTrack(trackConfig, playerCount) {
       startPositions.push({
         x: rowPoint.x + Math.cos(perpAngle) * lateralOffset,
         y: rowPoint.y + Math.sin(perpAngle) * lateralOffset,
-        angle: rowPoint.angle,
+        angle: startAngle,
       });
     }
 

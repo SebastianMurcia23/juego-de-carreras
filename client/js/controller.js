@@ -43,6 +43,8 @@ const S = {
   selectedWeaponId:    'vulcan_mg',
   isReady:             false,
   isFinished:          false,
+  raceId:              null,
+  raceIndex:           0,
   // Gyro / Motion
   hasGyro:         false,
   gyroGranted:     false,
@@ -764,7 +766,80 @@ function initSocket() {
     activateController();
   });
 
+  // GAME_COUNTDOWN is emitted at the start of every race countdown
+  // (including subsequent championship races), so we use it to reset the
+  // controller state that GAME_STARTING only covers for the very first race.
+  socket.on(EV.GAME_COUNTDOWN, ({ seconds, raceId, raceIndex }) => {
+    if (raceId) S.raceId = raceId;
+    if (raceIndex != null) S.raceIndex = raceIndex;
+    if (S.isFinished || S.phase !== 'controller') {
+      // Reset finished state so the next race can receive inputs
+      S.isFinished = false;
+      // Reset all inputs to neutral
+      S.inputs.steer = 0;
+      S.inputs.accel = false;
+      S.inputs.brake = false;
+      S.inputs.drift = false;
+      S.inputs.fire  = false;
+      S.inputs.power = false;
+      S.smoothSteer  = 0;
+      // Hide all race-end overlays
+      const finishedOverlay = $('ctrl-finished-overlay');
+      if (finishedOverlay) finishedOverlay.classList.add('hidden');
+      const resultsOverlay = $('ctrl-results-overlay');
+      if (resultsOverlay) resultsOverlay.classList.add('hidden');
+      const wrongWayBanner = $('ctrl-wrong-way-banner');
+      if (wrongWayBanner) wrongWayBanner.classList.add('hidden');
+      // Make sure the controller UI is visible
+      activateController();
+    }
+    // Show countdown toast
+    if (seconds > 0) {
+      toast(`⏱️ ${seconds}…`, '', 900);
+    } else {
+      toast('🏁 ¡ARRANCA!', 'success', 1500);
+    }
+  });
+
+  // Prompt 4: Authoritative Phase and State Synchronization
+  socket.on(EV.PHASE_CHANGED, (data) => {
+    if (!data) return;
+    if (data.raceId) S.raceId = data.raceId;
+    if (data.raceIndex != null) S.raceIndex = data.raceIndex;
+    if (data.phase === 'cuenta_regresiva' || data.phase === 'en_carrera') {
+      S.isFinished = false;
+      const finishedOverlay = $('ctrl-finished-overlay');
+      if (finishedOverlay) finishedOverlay.classList.add('hidden');
+      const resultsOverlay = $('ctrl-results-overlay');
+      if (resultsOverlay) resultsOverlay.classList.add('hidden');
+      const wrongWayBanner = $('ctrl-wrong-way-banner');
+      if (wrongWayBanner) wrongWayBanner.classList.add('hidden');
+      activateController();
+    }
+  });
+
+  socket.on(EV.RACE_STATE_SYNC, (data) => {
+    if (!data) return;
+    if (data.raceId) S.raceId = data.raceId;
+    if (data.raceIndex != null) S.raceIndex = data.raceIndex;
+    if (data.isFinished !== undefined) S.isFinished = Boolean(data.isFinished);
+    if (!S.isFinished && (data.phase === 'cuenta_regresiva' || data.phase === 'en_carrera')) {
+      const finishedOverlay = $('ctrl-finished-overlay');
+      if (finishedOverlay) finishedOverlay.classList.add('hidden');
+      const resultsOverlay = $('ctrl-results-overlay');
+      if (resultsOverlay) resultsOverlay.classList.add('hidden');
+      activateController();
+    } else if (S.isFinished) {
+      const finishedOverlay = $('ctrl-finished-overlay');
+      if (finishedOverlay) finishedOverlay.classList.remove('hidden');
+    }
+  });
+
   socket.on(EV.CAR_FINISHED, (data) => {
+    if (data && data.raceId && S.raceId && data.raceId !== S.raceId) {
+      console.warn('[controller] Discarding CAR_FINISHED from obsolete race', data.raceId);
+      return;
+    }
     if (data && data.seatToken === S.seatToken) {
       S.isFinished = true;
       S.inputs.steer = 0;
@@ -913,8 +988,23 @@ function initSocket() {
 
   socket.on(EV.GAME_STATE, (state) => {
     if (!state || !state.cars) return;
-    const myCar = state.cars.find(c => c.st === S.seatToken);
+    if (state.raceId) S.raceId = state.raceId;
+    if (state.raceIndex != null) S.raceIndex = state.raceIndex;
+
+    const myCar = state.cars.find(c => c.st === S.seatToken || c.token === S.seatToken);
     if (!myCar) return;
+
+    // Safety net: if server simulation is racing and reports our car active (not finished),
+    // ensure mobile controller is NOT stuck in finished/results overlay
+    if (!myCar.fin && S.isFinished && state.state === 'racing') {
+      console.warn('[controller] Safety net: auto-recovering stuck finished state for active car');
+      S.isFinished = false;
+      const finishedOverlay = $('ctrl-finished-overlay');
+      if (finishedOverlay) finishedOverlay.classList.add('hidden');
+      const resultsOverlay = $('ctrl-results-overlay');
+      if (resultsOverlay) resultsOverlay.classList.add('hidden');
+      activateController();
+    }
 
     const spdEl = $('hud-speed-val') || $('speed-number');
     const speedFactor = window.SHARED?.PHYSICS?.SPEED_DISPLAY_FACTOR || 0.5;
@@ -1200,3 +1290,18 @@ if (document.readyState === 'loading') {
 } else {
   boot();
 }
+
+window.__rrControllerState = function() {
+  return {
+    phase: S.phase,
+    raceId: S.raceId,
+    raceIndex: S.raceIndex,
+    isFinished: S.isFinished,
+    isReady: S.isReady,
+    isHost: S.isHost,
+    controllerActivated: S.controllerActivated,
+    sendLoopActive: !S.isFinished && Boolean(S.socket && S.socket.connected),
+    smoothSteer: S.smoothSteer,
+    inputs: { ...S.inputs },
+  };
+};

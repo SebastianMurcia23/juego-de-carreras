@@ -208,6 +208,31 @@ io.on('connection', (socket) => {
           isHost:      result.isHost,
           reconnected: true,
         });
+
+        // Prompt 4: Send full authoritative race state synchronization on reconnection
+        const room = rooms.rooms.get(result.roomCode);
+        const gameRoom = room?.gameRoom;
+        const car = gameRoom?.cars.get(seatToken);
+        let currentPhase = 'lobby';
+        if (room?.state === 'championship_finished') {
+          currentPhase = 'podio_final';
+        } else if (gameRoom) {
+          if (gameRoom.state === 'countdown') {
+            currentPhase = 'cuenta_regresiva';
+          } else if (gameRoom.state === 'racing') {
+            currentPhase = car?.finished ? 'terminado_espera' : 'en_carrera';
+          } else if (gameRoom.state === 'intermission') {
+            currentPhase = 'intermision_resultados';
+          }
+        }
+        socket.emit(EV.RACE_STATE_SYNC, {
+          phase: currentPhase,
+          raceId: gameRoom?.raceId || `${result.roomCode}_race_${room?.championship?.raceNumber || 0}`,
+          raceIndex: gameRoom?.raceIndex || room?.championship?.raceNumber || 0,
+          trackId: room?.settings?.trackId,
+          isFinished: Boolean(car?.finished),
+          finishPlace: car?.finishPlace || null,
+        });
       }
     } catch (e) {
       console.error('[reconnect_mobile]', e);

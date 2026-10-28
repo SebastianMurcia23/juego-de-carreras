@@ -49,8 +49,11 @@ class GameRoom {
     this.io        = io;
     this.roomCode  = roomCode;
     this.roomData  = roomData;
-    this.settings  = roomData.settings;
+    this.settings  = roomData ? roomData.settings : {};
     this.state     = 'countdown'; // 'countdown' | 'racing' | 'finished'
+    this.phase     = 'preparando_pista';
+    this.raceIndex = (roomData && roomData.championship) ? roomData.championship.raceNumber : 0;
+    this.raceId    = `${roomCode}_race_${this.raceIndex}`;
     this.tickCount = 0;
     this.interval  = null;
 
@@ -139,7 +142,7 @@ class GameRoom {
         lap:           0,      // completed laps
         passedCPCountInLap: 0, // checkpoints passed in current lap
         lastValidCP:   0,      // last confirmed valid checkpoint passed in order
-        trackProgress: 0,      // scalar distance along track (lap * trackLen + dist)
+        trackProgress: null,   // scalar distance along track (lap * trackLen + dist)
         closestSegIdx: 0,      // closest centerline segment index
         wrongWayTicks: 0,      // ticks spent facing/moving wrong way
         correctWayTicks: 0,    // ticks spent moving correctly
@@ -222,9 +225,20 @@ class GameRoom {
     this.startCountdown();
   }
 
+  _setPhase(phase) {
+    this.phase = phase;
+    this.io.to(this.roomCode).emit(SHARED.EVENTS.PHASE_CHANGED, {
+      phase,
+      raceId: this.raceId,
+      raceIndex: this.raceIndex,
+      trackId: this.settings ? this.settings.trackId : null,
+    });
+  }
+
   /* ── Intermission mode for championship between tracks ─────────────────── */
   startIntermission(intermissionSeconds, finishPayload) {
     this.state = 'intermission';
+    this._setPhase('intermision_resultados');
 
     // Ensure all previous projectiles and hazards are wiped clean
     if (this.itemSystem) {
@@ -246,6 +260,8 @@ class GameRoom {
       totalRaces: finishPayload.totalRaces,
       results: finishPayload.results,
       standings: finishPayload.standings,
+      raceId: this.raceId,
+      raceIndex: this.raceIndex,
     });
 
     // Start physics/broadcast loop (during intermission, cars do not move)
@@ -259,8 +275,13 @@ class GameRoom {
 
   startCountdown() {
     this.state = 'countdown';
+    this._setPhase('cuenta_regresiva');
     let countdown = PHY.COUNTDOWN_SECONDS || 3;
-    this.io.to(this.roomCode).emit(EV.GAME_COUNTDOWN, { seconds: countdown });
+    this.io.to(this.roomCode).emit(EV.GAME_COUNTDOWN, {
+      seconds: countdown,
+      raceId: this.raceId,
+      raceIndex: this.raceIndex,
+    });
 
     if (this.countdownInterval) {
       clearInterval(this.countdownInterval);
@@ -270,13 +291,23 @@ class GameRoom {
     this.countdownInterval = setInterval(() => {
       countdown--;
       if (countdown > 0) {
-        this.io.to(this.roomCode).emit(EV.GAME_COUNTDOWN, { seconds: countdown });
+        this.io.to(this.roomCode).emit(EV.GAME_COUNTDOWN, {
+          seconds: countdown,
+          raceId: this.raceId,
+          raceIndex: this.raceIndex,
+        });
       } else {
         clearInterval(this.countdownInterval);
         this.countdownInterval = null;
         this.state = 'racing';
         this.raceStartTick = this.tickCount;
         this.startTime = Date.now();
+        this.io.to(this.roomCode).emit(EV.GAME_COUNTDOWN, {
+          seconds: 0,
+          raceId: this.raceId,
+          raceIndex: this.raceIndex,
+        });
+        this._setPhase('en_carrera');
         console.log(`[game] Race started in room ${this.roomCode}`);
       }
     }, 1000);
@@ -788,6 +819,7 @@ class GameRoom {
         car.health -= PHY.COLLISION_DAMAGE * 0.3;
         car.vx *= PHY.WALL_BOUNCE;
         car.vy *= PHY.WALL_BOUNCE;
+        car.lastImpactTick = this.tickCount; // silence wrong-way for 1.5 s after wall hit
       }
     }
   }
@@ -854,12 +886,13 @@ class GameRoom {
     const cumDists = this.track.cumulativeDistances;
     const totalLen = this.track.totalCenterlineLength;
 
-    // 1. Local search for closest centerline segment around car.currentCP (strictly local [-2, +1] to avoid hairpin jumps)
+    // 1. Local search for closest centerline segment around car.currentCP
+    //    Window [-5, +5] to survive hairpins without jumping to a far parallel segment.
     let bestDistSq = Infinity;
     let bestSegIdx = (car.currentCP - 1 + n) % n;
     let bestT = 0;
 
-    for (let offset = -2; offset <= 1; offset++) {
+    for (let offset = -5; offset <= 5; offset++) {
       const i = (car.currentCP + offset + n * 2) % n;
       const a = cps[i];
       const b = cps[(i + 1) % n];
@@ -883,40 +916,63 @@ class GameRoom {
 
     car.closestSegIdx = bestSegIdx;
     const currentDistAlongTrack = cumDists[bestSegIdx] + bestT * segLens[bestSegIdx];
-    const prevProgress = car.trackProgress || 0;
+    const prevProgress = car.trackProgress;
     const newProgress = car.lap * totalLen + currentDistAlongTrack;
     car.trackProgress = newProgress;
-    const deltaProgress = newProgress - prevProgress;
+    let rawDelta = 0;
+    if (prevProgress != null) {
+      rawDelta = newProgress - prevProgress;
+      // Circular wrap handling (finish line crossing forward or backward)
+      while (rawDelta > totalLen * 0.5) rawDelta -= totalLen;
+      while (rawDelta < -totalLen * 0.5) rawDelta += totalLen;
+    }
 
-    // 2. Wrong-way detection
-    const a = cps[bestSegIdx];
-    const b = cps[(bestSegIdx + 1) % n];
+    // 2. Exponential moving average of deltaProgress (~0.75 s at 30 Hz)
+    //    Smooths out single-tick bounces from collisions or power effects.
+    const EMA_ALPHA = 0.08;
+    if (prevProgress == null) {
+      car.deltaProgressEMA = null;
+    } else if (car.deltaProgressEMA == null) {
+      car.deltaProgressEMA = rawDelta;
+    } else {
+      car.deltaProgressEMA = car.deltaProgressEMA * (1 - EMA_ALPHA) + rawDelta * EMA_ALPHA;
+    }
+    const smoothedDelta = car.deltaProgressEMA || 0;
+
+    // 3. Track tangent at best segment (canonical direction)
+    const segA = cps[bestSegIdx];
+    const segB = cps[(bestSegIdx + 1) % n];
     const segLen = segLens[bestSegIdx] || 1;
-    const tx = (b.x - a.x) / segLen;
-    const ty = (b.y - a.y) / segLen;
+    const tx = (segB.x - segA.x) / segLen;
+    const ty = (segB.y - segA.y) / segLen;
 
-    const fx = Math.cos(car.angle);
-    const fy = Math.sin(car.angle);
-    const facingDot = fx * tx + fy * ty;
+    // Local curvature: angle change to next segment
+    const segC = cps[(bestSegIdx + 2) % n];
+    const segLen2 = segLens[(bestSegIdx + 1) % n] || 1;
+    const tx2 = (segC.x - segB.x) / segLen2;
+    const ty2 = (segC.y - segB.y) / segLen2;
+    const curvatureDot = tx * tx2 + ty * ty2; // 1=straight, <0=hairpin
+    // In tight corners (curvatureDot < 0.5) use a more permissive threshold
+    const moveDotThreshold = curvatureDot < 0.5 ? -0.55 : -0.35;
 
-    const moveDot = car.speed > 5
-      ? (car.vx * tx + car.vy * ty) / car.speed
-      : facingDot;
+    // 4. Velocity dot ONLY — chassis angle causes false positives when drifting
+    const speed = car.speed || 0;
+    const moveDot = speed > 10 ? (car.vx * tx + car.vy * ty) / speed : 0;
 
-    // Filter out race start (<3.0s), low speed (<35 px/s), and finished cars
-    const canCheckWrongWay = this.elapsedTime > 3.0 && car.speed > 35 && !car.finished;
+    // 5. Silence conditions
+    const invulnActive = this.tickCount < (car.invulnUntil || 0);
+    const stunActive   = ARCADE && this.itemSystem && this.itemSystem.isStunned(car);
+    const postImpact   = car.lastImpactTick && (this.tickCount - car.lastImpactTick < 45);
+    const silenced = this.elapsedTime < 4.0 || speed < 40 || invulnActive || stunActive || postImpact || car.finished;
 
-    // Sustained movement against track tangent while losing progress
-    const isMovingWrongWay = canCheckWrongWay && (
-      (moveDot < -0.3 && deltaProgress <= 1.0) ||
-      (facingDot < -0.4 && moveDot < -0.1)
-    );
+    // 6. Wrong-way: sustained velocity against tangent AND smoothed backward progress
+    const isMovingWrongWay = !silenced && moveDot < moveDotThreshold && smoothedDelta < 0;
 
     if (isMovingWrongWay) {
       car.wrongWayTicks = (car.wrongWayTicks || 0) + 1;
       car.correctWayTicks = 0;
 
-      // Hysteresis: warning appears after ~1.0s (30 ticks) of sustained wrong-way driving
+      // Entry hysteresis: warning after ~1.0 s (30 ticks) of sustained wrong-way
       if (car.wrongWayTicks >= 30) {
         car.wrongWayActive = true;
         const countdownTicks = car.wrongWayTicks - 30;
@@ -938,7 +994,7 @@ class GameRoom {
       }
     } else {
       car.correctWayTicks = (car.correctWayTicks || 0) + 1;
-      // After ~0.66s (20 ticks) of correct driving, clear warning
+      // Exit hysteresis: after ~0.67 s (20 ticks) of correct driving, clear warning
       if (car.correctWayTicks >= 20) {
         if (car.wrongWayActive) {
           car.wrongWayActive = false;
@@ -999,6 +1055,10 @@ class GameRoom {
     car.invulnUntil = this.tickCount + Math.floor(PHY.TICK_RATE_HZ * 1.5);
     car.slowUntil = 0;
     car.arcadeStunEnd = 0;
+    // Reset EMA so previous backward motion doesn't persist into fresh start
+    car.deltaProgressEMA = null;
+    car.trackProgress = null;
+    car.lastImpactTick = this.tickCount; // silence wrong-way for 1.5 s after respawn
   }
 
   /* ── Test crossing of full-width gate in forward direction ────────────── */
@@ -1349,6 +1409,9 @@ class GameRoom {
             a.vy -= ny * dot * aShare * PHY.CAR_BOUNCE;
             b.vx += nx * dot * bShare * PHY.CAR_BOUNCE;
             b.vy += ny * dot * bShare * PHY.CAR_BOUNCE;
+            // Silence wrong-way detector briefly after car-car collision
+            a.lastImpactTick = this.tickCount;
+            b.lastImpactTick = this.tickCount;
           }
 
           if (ARCADE) {
@@ -1578,6 +1641,11 @@ class GameRoom {
         firing: Boolean(car.input.fire),
         ww:    car.wrongWayActive ? (car.lastWarnedSeconds || 5) : 0,
         ghost: Boolean(car.finished),
+        s:     car.trackProgress != null ? Math.round(car.trackProgress) : 0,
+        dot:   car.moveDot != null ? +car.moveDot.toFixed(2) : 0,
+        vx:    +car.vx.toFixed(1),
+        vy:    +car.vy.toFixed(1),
+        dirState: car.wrongWayActive ? 'warning' : 'ok',
       });
     }
 
@@ -1620,6 +1688,9 @@ class GameRoom {
     this.io.to(this.roomCode).emit(EV.GAME_STATE, {
       tick:   this.tickCount,
       state:  this.state,
+      phase:  this.phase,
+      raceId: this.raceId,
+      raceIndex: this.raceIndex,
       cars,
       projs,
       mines:  mns,

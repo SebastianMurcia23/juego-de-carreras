@@ -409,7 +409,117 @@ async function runComprehensiveChampionshipVerification() {
   // 5. Player names appear cleanly (no internal IDs)
   assert.strictEqual(c1.name, 'Carlos', 'Driver 1 custom name must be preserved');
   assert.strictEqual(c2.name, 'Carlos (2)', 'Driver 2 duplicate name resolution must be preserved');
-  console.log('  ✅ Finished car rules, autopilot isolation, and player name checks PASSED.');
+  // ──────────────────────────────────────────────────────────────────────────
+  // Prompt 4: Simulated Mobile Client Multi-Race Synchronization Test
+  // ──────────────────────────────────────────────────────────────────────────
+  console.log('\n📱 Testing Prompt 4: Mobile Client Multi-Race State & Reconnection...');
+  const mobileEvents = [];
+  const fakeMobileIo = fakeIo(mobileEvents);
+
+  const rm = new RoomManager(fakeMobileIo);
+  const created = await rm.createRoom('host-sock');
+  const roomCode = created.roomCode;
+  const hostToken = created.hostToken;
+  const guest = await rm.joinRoom(roomCode, 'guest-screen-sock');
+  const seatToken = guest.seatToken;
+
+  // Link mobile phone
+  const linkRes = await rm.linkSeat(seatToken, 'PhonePlayer', 'guest-phone-sock');
+  assert.strictEqual(linkRes.success, true);
+
+  // Set championship mode with 3 tracks
+  rm.updateRoomSettings(roomCode, hostToken, {
+    mode: 'championship',
+    trackCount: 5,
+    trackOrder: ['ae-2009', 'ar-1952', 'it-1922'],
+    laps: 1,
+  });
+
+  // Start championship Race 1
+  rm.startGame(roomCode, hostToken);
+  const game1 = rm.rooms.get(roomCode).gameRoom;
+  assert(game1, 'Race 1 game room must be initialized');
+  assert.strictEqual(game1.raceIndex, 0);
+
+  // Check that mobile receives countdown with raceId
+  const cdEvt1 = mobileEvents.find(e => e.event === 'game_countdown');
+  assert(cdEvt1, 'Mobile must receive game_countdown');
+  assert.strictEqual(cdEvt1.data.raceId, `${roomCode}_race_0`);
+
+  // Fast forward to racing
+  game1.state = 'racing';
+  const playerCar1 = game1.cars.get(seatToken);
+  assert(playerCar1, 'Player car must exist in race 1');
+  assert.strictEqual(playerCar1.finished, false);
+
+  // Player finishes Race 1 P1
+  playerCar1.finished = true;
+  playerCar1.finishPlace = 1;
+  playerCar1.finishTime = 12000;
+  game1._emitToSeat(seatToken, SHARED.EVENTS.CAR_FINISHED, {
+    place: 1,
+    time: 12000,
+    raceId: game1.raceId,
+    raceIndex: 0,
+  });
+
+  // Verify car_finished emitted to room
+  assert(mobileEvents.some(e => e.event === 'car_finished' && e.data.place === 1));
+
+  // Advance to intermission
+  rm.prepareNextChampionshipRace(roomCode, {
+    raceNumber: 0,
+    totalRaces: 3,
+    nextTrackName: 'Buenos Aires · 1952',
+    standings: [{ seatToken, name: 'PhonePlayer', points: 25, place: 1 }],
+    results: [{ seatToken, name: 'PhonePlayer', points: 25, place: 1 }],
+  });
+
+  const interEvt = mobileEvents.find(e => e.event === 'championship_intermission');
+  assert(interEvt, 'Mobile must receive championship_intermission');
+  assert.strictEqual(interEvt.data.raceIndex, 1);
+
+  // Reconnection mid-intermission: simulate reconnecting mobile socket
+  const reconRes = await rm.reconnectMobile(seatToken, 'guest-phone-sock-2');
+  assert.strictEqual(reconRes.success, true);
+  const roomObj = rm.rooms.get(roomCode);
+  const game2Inter = roomObj.gameRoom;
+  assert.strictEqual(game2Inter.state, 'intermission');
+  assert.strictEqual(game2Inter.raceIndex, 1);
+
+  // Start Race 2 countdown
+  rm.startChampionshipRace(roomCode);
+  const game2 = rm.rooms.get(roomCode).gameRoom;
+  assert.strictEqual(game2.state, 'countdown');
+  assert.strictEqual(game2.raceIndex, 1);
+  assert.strictEqual(game2.raceId, `${roomCode}_race_1`);
+
+  // Verify mobile receives countdown with NEW raceId
+  const cdEvt2 = mobileEvents.filter(e => e.event === 'game_countdown' && e.data.raceId === `${roomCode}_race_1`);
+  assert(cdEvt2.length > 0, 'Mobile must receive countdown with new raceId in race 2');
+
+  // Verify player in race 2 has finished = false, autopilot off
+  const playerCar2 = game2.cars.get(seatToken);
+  assert(playerCar2, 'Player car must exist in race 2');
+  assert.strictEqual(playerCar2.finished, false, 'Finished status must be reset to false in race 2');
+  assert.strictEqual(playerCar2.finishPlace, 0, 'Finish place must be reset');
+
+  // Advance countdown to racing (GO)
+  game2.state = 'racing';
+
+  // Send control input in race 2
+  game2.setInput(seatToken, { accel: true, steer: 0.25 });
+  assert.strictEqual(playerCar2.input.accel, true, 'Controls must be accepted in race 2');
+  assert.strictEqual(playerCar2.input.steer, 0.25, 'Steering must be accepted in race 2');
+
+  // Verify car actually moves when tick runs
+  const prevCarX = playerCar2.x;
+  for (let t = 0; t < 5; t++) {
+    game2.tick(DT);
+  }
+  assert(playerCar2.x !== prevCarX || playerCar2.speed > 0, 'Car must physically move in race 2');
+
+  console.log('  ✅ Mobile client multi-race sync, countdown, finished reset, and control reactivation PASSED.');
 
   console.log('\n🎉 ALL CHAMPIONSHIP & TRACK SWITCH VERIFICATION CHECKS PASSED!\n');
 }

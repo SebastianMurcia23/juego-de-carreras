@@ -9,7 +9,7 @@
       "ticks": 1360,
       "seconds": 45.33,
       "maxSpeed": 486.84,
-      "maxDistanceFromTrack": 73.12,
+      "maxDistanceFromTrack": 73.07,
       "error": null
     },
     {
@@ -18,7 +18,7 @@
       "ticks": 1333,
       "seconds": 44.43,
       "maxSpeed": 487.45,
-      "maxDistanceFromTrack": 73.16,
+      "maxDistanceFromTrack": 73.12,
       "error": null
     },
     {
@@ -27,7 +27,7 @@
       "ticks": 1252,
       "seconds": 41.73,
       "maxSpeed": 481.49,
-      "maxDistanceFromTrack": 73.17,
+      "maxDistanceFromTrack": 73.14,
       "error": null
     },
     {
@@ -36,7 +36,7 @@
       "ticks": 1296,
       "seconds": 43.2,
       "maxSpeed": 487.63,
-      "maxDistanceFromTrack": 72.68,
+      "maxDistanceFromTrack": 72.83,
       "error": null
     },
     {
@@ -45,7 +45,7 @@
       "ticks": 1318,
       "seconds": 43.93,
       "maxSpeed": 488.25,
-      "maxDistanceFromTrack": 72.97,
+      "maxDistanceFromTrack": 73.05,
       "error": null
     },
     {
@@ -54,7 +54,7 @@
       "ticks": 1454,
       "seconds": 48.47,
       "maxSpeed": 488.05,
-      "maxDistanceFromTrack": 89.44,
+      "maxDistanceFromTrack": 89.41,
       "error": null
     },
     {
@@ -69,10 +69,10 @@
     {
       "id": "br-1940",
       "completed": true,
-      "ticks": 1317,
-      "seconds": 43.9,
-      "maxSpeed": 488.15,
-      "maxDistanceFromTrack": 72.89,
+      "ticks": 1327,
+      "seconds": 44.23,
+      "maxSpeed": 488.16,
+      "maxDistanceFromTrack": 72.99,
       "error": null
     },
     {
@@ -81,7 +81,7 @@
       "ticks": 1316,
       "seconds": 43.87,
       "maxSpeed": 488.25,
-      "maxDistanceFromTrack": 73.26,
+      "maxDistanceFromTrack": 73.24,
       "error": null
     },
     {
@@ -126,7 +126,7 @@
       "ticks": 1292,
       "seconds": 43.07,
       "maxSpeed": 488.24,
-      "maxDistanceFromTrack": 73.21,
+      "maxDistanceFromTrack": 73.23,
       "error": null
     },
     {
@@ -162,7 +162,7 @@
       "ticks": 1362,
       "seconds": 45.4,
       "maxSpeed": 488.25,
-      "maxDistanceFromTrack": 73.23,
+      "maxDistanceFromTrack": 73.2,
       "error": null
     },
     {
@@ -171,7 +171,7 @@
       "ticks": 1419,
       "seconds": 47.3,
       "maxSpeed": 488.17,
-      "maxDistanceFromTrack": 73.27,
+      "maxDistanceFromTrack": 73.25,
       "error": null
     },
     {
@@ -180,16 +180,16 @@
       "ticks": 1339,
       "seconds": 44.63,
       "maxSpeed": 488.14,
-      "maxDistanceFromTrack": 73.25,
+      "maxDistanceFromTrack": 73.23,
       "error": null
     },
     {
       "id": "it-1922",
       "completed": true,
-      "ticks": 1275,
-      "seconds": 42.5,
-      "maxSpeed": 488.15,
-      "maxDistanceFromTrack": 72.03,
+      "ticks": 1277,
+      "seconds": 42.57,
+      "maxSpeed": 488.13,
+      "maxDistanceFromTrack": 72.3,
       "error": null
     },
     {
@@ -198,7 +198,7 @@
       "ticks": 1337,
       "seconds": 44.57,
       "maxSpeed": 488.23,
-      "maxDistanceFromTrack": 73.83,
+      "maxDistanceFromTrack": 73.59,
       "error": null
     },
     {
@@ -207,16 +207,16 @@
       "ticks": 1385,
       "seconds": 46.17,
       "maxSpeed": 487.5,
-      "maxDistanceFromTrack": 73.03,
+      "maxDistanceFromTrack": 73.1,
       "error": null
     },
     {
       "id": "mc-1929",
       "completed": true,
-      "ticks": 1587,
-      "seconds": 52.9,
+      "ticks": 1586,
+      "seconds": 52.87,
       "maxSpeed": 488.13,
-      "maxDistanceFromTrack": 92.05,
+      "maxDistanceFromTrack": 92.02,
       "error": null
     },
     {
@@ -225,7 +225,7 @@
       "ticks": 1327,
       "seconds": 44.23,
       "maxSpeed": 488.25,
-      "maxDistanceFromTrack": 72.95,
+      "maxDistanceFromTrack": 73.03,
       "error": null
     },
     {
@@ -243,7 +243,7 @@
       "ticks": 1348,
       "seconds": 44.93,
       "maxSpeed": 488.1,
-      "maxDistanceFromTrack": 73.14,
+      "maxDistanceFromTrack": 73.18,
       "error": null
     },
     {
@@ -252,7 +252,7 @@
       "ticks": 1356,
       "seconds": 45.2,
       "maxSpeed": 488.21,
-      "maxDistanceFromTrack": 73.32,
+      "maxDistanceFromTrack": 73.31,
       "error": null
     },
     {
@@ -270,7 +270,7 @@
       "ticks": 1420,
       "seconds": 47.33,
       "maxSpeed": 478.36,
-      "maxDistanceFromTrack": 73.28,
+      "maxDistanceFromTrack": 73.26,
       "error": null
     },
     {
@@ -285,10 +285,10 @@
     {
       "id": "sa-2021",
       "completed": true,
-      "ticks": 1329,
-      "seconds": 44.3,
-      "maxSpeed": 486.52,
-      "maxDistanceFromTrack": 72.95,
+      "ticks": 1331,
+      "seconds": 44.37,
+      "maxSpeed": 486.66,
+      "maxDistanceFromTrack": 73.03,
       "error": null
     },
     {
@@ -297,7 +297,7 @@
       "ticks": 1397,
       "seconds": 46.57,
       "maxSpeed": 486.42,
-      "maxDistanceFromTrack": 73.14,
+      "maxDistanceFromTrack": 73.09,
       "error": null
     },
     {
@@ -306,7 +306,7 @@
       "ticks": 1348,
       "seconds": 44.93,
       "maxSpeed": 488.24,
-      "maxDistanceFromTrack": 72.28,
+      "maxDistanceFromTrack": 72.52,
       "error": null
     },
     {
@@ -315,7 +315,7 @@
       "ticks": 1295,
       "seconds": 43.17,
       "maxSpeed": 488.25,
-      "maxDistanceFromTrack": 73.25,
+      "maxDistanceFromTrack": 73.26,
       "error": null
     },
     {
@@ -324,7 +324,7 @@
       "ticks": 1296,
       "seconds": 43.2,
       "maxSpeed": 488.24,
-      "maxDistanceFromTrack": 73.1,
+      "maxDistanceFromTrack": 73.15,
       "error": null
     },
     {
@@ -351,7 +351,7 @@
       "ticks": 1266,
       "seconds": 42.2,
       "maxSpeed": 488.23,
-      "maxDistanceFromTrack": 73.32,
+      "maxDistanceFromTrack": 73.31,
       "error": null
     },
     {
