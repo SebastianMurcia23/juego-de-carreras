@@ -210,9 +210,14 @@ function resizeCanvas() {
 }
 
 /* ─── Data setters ─────────────────────────────────────────────────────── */
-function setTrack(trackData) {
+function resetForNewRace(trackData) {
   GR.track = trackData;
   GR.chaseBackdrop = null;
+  GR.powerEffects = [];
+  GR.arrivals = [];
+  GR.raceFinished = false;
+  GR.results = null;
+  GR.intermission = null;
   // Center camera on start
   if (trackData && trackData.startPositions && trackData.startPositions.length > 0) {
     GR.camera.x = trackData.startPositions[0].x;
@@ -222,6 +227,10 @@ function setTrack(trackData) {
   }
 }
 
+function setTrack(trackData) {
+  resetForNewRace(trackData);
+}
+
 function setGameState(state) {
   GR.gameState = state;
 }
@@ -229,11 +238,26 @@ function setGameState(state) {
 function setCountdown(seconds) {
   GR.countdown = seconds;
   GR.countdownEnd = Date.now() + seconds * 1000;
+  GR.raceFinished = false;
+  GR.results = null;
+  GR.intermission = null;
 }
 
 function setResults(results) {
   GR.raceFinished = true;
   GR.results = Array.isArray(results) ? { results: results } : results;
+  if (GR.results && GR.results.intermissionSeconds) {
+    GR.intermissionEnd = Date.now() + GR.results.intermissionSeconds * 1000;
+  }
+}
+
+function setIntermission(data) {
+  GR.intermission = data;
+  GR.intermissionEnd = Date.now() + (data.seconds || 12) * 1000;
+  if (data.results || data.standings) {
+    GR.results = data;
+    GR.raceFinished = true;
+  }
 }
 
 function setArrival(arrival) {
@@ -1656,9 +1680,11 @@ window.GAME_RENDERER = {
   init:            init,
   stop:            stop,
   setTrack:        setTrack,
+  resetForNewRace: resetForNewRace,
   setGameState:    setGameState,
   setCountdown:    setCountdown,
   setResults:      setResults,
+  setIntermission: setIntermission,
   triggerPowerEffect: triggerPowerEffect,
   setArrival:        setArrival,
   getLocalCar:     getLocalCar,

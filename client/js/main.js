@@ -264,12 +264,27 @@ function initSocket() {
     }
   });
 
+  S.socket.on(EV.CHAMPIONSHIP_INTERMISSION, function(data) {
+    if (window.GAME_RENDERER && window.GAME_RENDERER.setIntermission) {
+      window.GAME_RENDERER.setIntermission(data);
+    }
+  });
+
+  S.socket.on(EV.CHAMPIONSHIP_FINISHED, function(data) {
+    if (window.GAME_RENDERER && window.GAME_RENDERER.setResults) {
+      window.GAME_RENDERER.setResults(Object.assign({}, data, {
+        championshipFinished: true,
+      }));
+    }
+    toast('🏆 ¡CAMPEONATO FINALIZADO! Podio definitivo.', 'success', 10000);
+  });
+
   S.socket.on(EV.CAR_FINISHED, function(data) {
     if (window.GAME_RENDERER && window.GAME_RENDERER.setArrival) {
       window.GAME_RENDERER.setArrival(data);
     }
     if (data && data.name) {
-      showToast('🏁 ' + data.name + ' llegó en P' + data.place);
+      toast('🏁 ' + data.name + ' llegó en P' + data.place, 'success', 3500);
     }
   });
 

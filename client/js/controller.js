@@ -686,7 +686,122 @@ function initSocket() {
 
   socket.on(EV.GAME_STARTING, ({ countdownSeconds }) => {
     toast(`🏁 ¡CARRERA EN ${countdownSeconds}s!`, 'success', 4000);
+    const resultsOverlay = $('ctrl-results-overlay');
+    if (resultsOverlay) resultsOverlay.classList.add('hidden');
     activateController();
+  });
+
+  socket.on(EV.CAR_FINISHED, (data) => {
+    if (data && data.seatToken === S.seatToken) {
+      if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 200]);
+      toast(`🏁 ¡Terminaste en el puesto P${data.place}! (Modo espectador)`, 'success', 6000);
+    }
+  });
+
+  function showMobileResults(data) {
+    const overlay = $('ctrl-results-overlay');
+    if (!overlay) return;
+    overlay.classList.remove('hidden');
+
+    const res = data.results || [];
+    const standings = data.standings || [];
+    const myResult = res.find(r => r.seatToken === S.seatToken);
+    const myStanding = standings.find(s => s.seatToken === S.seatToken);
+
+    const titleEl = $('ctrl-results-title');
+    const subEl = $('ctrl-results-subtitle');
+    const isFinished = Boolean(data.championshipFinished);
+    const isChamp = Boolean(data.totalRaces && data.totalRaces > 1);
+
+    if (titleEl) {
+      titleEl.textContent = isFinished ? '🏆 PODIO FINAL' : '🏁 RESULTADOS';
+      titleEl.style.color = isFinished ? 'var(--yellow)' : 'var(--cyan)';
+    }
+    if (subEl) {
+      subEl.textContent = isChamp
+        ? `Carrera ${data.raceNumber || 1} de ${data.totalRaces}`
+        : 'Carrera finalizada';
+    }
+
+    if (myResult || myStanding) {
+      const pl = myResult ? myResult.place : (myStanding ? myStanding.place : '—');
+      const pts = myResult ? myResult.points : 0;
+      const totPts = myStanding ? myStanding.points : pts;
+      const plEl = $('ctrl-personal-place');
+      const descEl = $('ctrl-personal-desc');
+      if (plEl) plEl.textContent = `P${pl}`;
+      if (descEl) descEl.textContent = `+${pts} pts esta carrera · Total: ${totPts} pts`;
+    }
+
+    // Render standings summary
+    const listEl = $('ctrl-standings-list');
+    if (listEl) {
+      listEl.innerHTML = '';
+      const listToRender = isFinished && standings.length > 0 ? standings : (res.length > 0 ? res : standings);
+      listToRender.slice(0, 5).forEach((r, idx) => {
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:6px 10px; background:rgba(255,255,255,0.04); border-radius:6px; font-size:0.85rem;';
+        const standing = standings.find(s => s.seatToken === r.seatToken) || r;
+        const place = r.place || (idx + 1);
+        const medal = place === 1 ? '🥇 ' : place === 2 ? '🥈 ' : place === 3 ? '🥉 ' : '';
+        const isMe = r.seatToken === S.seatToken;
+        row.innerHTML = `
+          <span style="font-weight:bold; color:${place === 1 ? '#ffd700' : place === 2 ? '#e0e0e0' : place === 3 ? '#cd7f32' : 'var(--text-muted)'};">${medal}P${place}</span>
+          <span style="flex:1; margin:0 8px; color:${isMe ? 'var(--cyan)' : '#ffffff'}; font-weight:${isMe ? 'bold' : 'normal'}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${r.name || 'Piloto'}</span>
+          <span style="color:var(--yellow); font-weight:bold;">${standing.points || r.points || 0} pts</span>
+        `;
+        listEl.appendChild(row);
+      });
+    }
+
+    // Next track info
+    const nextTrackInfo = $('ctrl-next-track-info');
+    const nextTrackName = data.nextTrackName;
+    if (!isFinished && nextTrackName) {
+      if (nextTrackInfo) nextTrackInfo.style.display = 'block';
+      const nameEl = $('ctrl-next-track-name');
+      const timeEl = $('ctrl-intermission-timer');
+      if (nameEl) nameEl.textContent = nextTrackName;
+      if (timeEl) timeEl.textContent = `Iniciando en ${data.intermissionSeconds || 12}s…`;
+    } else {
+      if (nextTrackInfo) nextTrackInfo.style.display = 'none';
+    }
+
+    // Host button
+    const nextBtn = $('ctrl-btn-next-race');
+    if (nextBtn) {
+      if (S.isHost && !isFinished && nextTrackName) {
+        nextBtn.classList.remove('hidden');
+        nextBtn.disabled = false;
+        nextBtn.textContent = '⏩ Comenzar siguiente pista';
+        nextBtn.onclick = () => {
+          const roomCode = S.roomCode || window.location.pathname.split('/')[2];
+          const hostToken = localStorage.getItem('rr_host_token') || S.hostToken;
+          socket.emit(EV.NEXT_RACE, { roomCode, hostToken });
+          nextBtn.disabled = true;
+          nextBtn.textContent = 'Iniciando…';
+        };
+      } else {
+        nextBtn.classList.add('hidden');
+      }
+    }
+  }
+
+  socket.on(EV.RACE_FINISHED, (data) => {
+    showMobileResults(data);
+  });
+
+  socket.on(EV.CHAMPIONSHIP_INTERMISSION, (data) => {
+    showMobileResults(data);
+    const timerEl = $('ctrl-intermission-timer');
+    if (timerEl && data.seconds) {
+      timerEl.textContent = `Iniciando en ${data.seconds}s…`;
+    }
+  });
+
+  socket.on(EV.CHAMPIONSHIP_FINISHED, (data) => {
+    showMobileResults(Object.assign({}, data, { championshipFinished: true }));
+    toast('🏆 ¡CAMPEONATO FINALIZADO! Podio definitivo.', 'success', 10000);
   });
 
   socket.on(EV.GAME_STATE, (state) => {

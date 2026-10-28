@@ -871,3 +871,37 @@ El renderizador 3D en `client/js/threeGameRenderer.js` replica con precisión el
 | `client/js/main.js` | Lista mini de jugadores: estados explícitos "Eligiendo / Confirmado ✓ / Desconectado... / Esperando QR". Lista admin: filas de jugadores desconectados con opacidad 0.6 y etiqueta "Desconectado (volviendo...)". `itemDistribution` por defecto ahora es `'positional'`. |
 
 **Verificación:** `verify-tracks.js` (40/40), `verify-bots.js` (40/40), `verify-items.js` (5/5), `verify-championship.js` (5/5). Sin cambios en lógica de servidor.
+
+### Tarea 8: Corrección de bug visual (cambio de pista) y flujo completo de resultados en campeonato
+
+**Objetivos:**
+- **Problema A (bug visual):** Al cambiar de pista en campeonato, los carros y cajas de poderes se volvían invisibles.
+- **Problema B (flujo de resultados):** La carrera terminaba al llegar el primer carro; ahora todos finalizan (o reciben DNF por timeout). Durante el cambio de pista, la nueva pista y los carros en la parrilla se cargan en segundo plano mientras se muestra el overlay de resultados durante 10–12 s. El anfitrión puede saltarse la espera. Al terminar, un countdown `3-2-1-¡YA!` precede la nueva carrera con carros inmovilizados.
+
+**Causa raíz confirmada (Problema A — objetos invisibles):**
+
+1. `R.cars` y `R.itemBoxMeshes` en `threeGameRenderer.js` retenían las keys de la pista anterior. Al llegar el `TRACK_DATA` de la pista nueva, el bucle de render consideraba que los meshes ya existían y no los añadía al nuevo `R.carGroup` / `R.roadGroup`.
+2. `_boxMat` en `client/js/fx/itemMeshes.js` era un singleton a nivel de módulo. `clearGroup(R.roadGroup)` llamaba `_boxMat.dispose()` al limpiar; las nuevas cajas de la siguiente pista usaban ese material ya desechado.
+3. `init()` en `threeGameRenderer.js` recreaba el canvas WebGL y duplicaba el animation loop en cada `TRACK_DATA`.
+
+**Archivos modificados:**
+
+| Archivo | Cambio principal |
+|---|---|
+| `server/GameRoom.js` | `startIntermission()`: llama a `itemSystem.clear()` antes de emitir; almacena `this.countdownInterval` para poder cancelarlo; `stop()` cancela también `countdownInterval`. |
+| `server/RoomManager.js` | Refactorización completa del flujo de campeonato: nueva `prepareNextChampionshipRace()` carga la pista y posiciona carros en la parrilla durante la intermisión; `startChampionshipRace()` dispara el countdown; `advanceChampionship()` detecta si ya está en intermisión y salta directo al countdown si el anfitrión lo pide. |
+| `client/js/fx/itemMeshes.js` | `resetMaterials()` anula `_boxMat`; `_getBoxMat()` lo recrea limpio si fue anulado o desechado. |
+| `client/js/threeGameRenderer.js` | `init()` idempotente; `resetForNewRace(track)` limpia meshes y reconstruye la escena; safeguards en `updateCars()`, `updateItemBoxes()` y `updateItemProjectiles()` para re-adjuntar meshes huérfanos; `window.__rrDebugScene()` ampliado con `carCount`, `itemBoxCount`, `projectileCount`, `cameraPosition`, `rendererActive`. |
+| `client/js/gameRenderer.js` | `resetForNewRace()` y `setIntermission()` añadidos; `raceFinished/results/intermission` se resetean en cada transición. |
+| `client/js/main.js` y `player.js` | Listeners para `CHAMPIONSHIP_INTERMISSION`, `CHAMPIONSHIP_FINISHED`, `CAR_FINISHED`. |
+| `client/controller.html` y `controller.js` | Overlay `#ctrl-results-overlay` con posición personal, tabla de clasificación, info de siguiente pista y botón "Comenzar siguiente pista" para el anfitrión; toast/haptic en llegada; timer de intermisión con cuenta regresiva. |
+| `tools/verify-championship.js` | Ampliado de 5 a 8 checks: (c) carros en parrilla con coordenadas finitas dentro de límites de la pista, inmóviles durante intermisión; (d) cajas de ítem en cada pista nueva dentro del half-width; (e) proyectiles y aceites de la carrera anterior completamente eliminados; RoomManager integration test (intermisión + host skip). |
+| `package.json` | `node tools/verify-championship.js` añadido a `npm test`. |
+| `client/index.html` y `controller.html` | Bump de versiones de cache buster. |
+
+**Verificación `npm test`:** `verify-tracks` (40/40), `verify-bots` (40/40), `verify-items` (5/5), `verify-items-bounds` (40/40), `verify-championship` (8/8). ✅ Todo en verde.
+
+**Riesgos / pendiente:**
+- El countdown usa `setInterval` real de 1 s; en escenarios de alta carga el intervalo puede derivar. Para evitar arrastre de tiempo, se podría usar `Date.now()` como referencia.
+- La función `drawResultsOverlay` del overlay en canvas 2D asume `ctx` global; si el renderizador cambia a 3D puro en una versión futura, deberá migrarse al HUD Three.js.
+

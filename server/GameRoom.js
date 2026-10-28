@@ -190,24 +190,78 @@ class GameRoom {
     // Send track data to all clients
     this.io.to(this.roomCode).emit(EV.TRACK_DATA, this.track);
 
-    // Countdown phase
-    let countdown = PHY.COUNTDOWN_SECONDS;
-    const countdownInterval = setInterval(() => {
-      this.io.to(this.roomCode).emit(EV.GAME_COUNTDOWN, { seconds: countdown });
-      countdown--;
-      if (countdown < 0) {
-        clearInterval(countdownInterval);
-        this.state = 'racing';
-        this.raceStartTick = this.tickCount;
-        console.log(`[game] Race started in room ${this.roomCode}`);
-      }
-    }, 1000);
+    // Initial broadcast so clients immediately see the grid and boxes
+    this._broadcastState();
 
     // Start physics loop
     const dt = 1 / PHY.TICK_RATE_HZ;
-    this.interval = setInterval(() => {
-      this.tick(dt);
-    }, PHY.TICK_MS);
+    if (!this.interval) {
+      this.interval = setInterval(() => {
+        this.tick(dt);
+      }, PHY.TICK_MS);
+    }
+
+    this.startCountdown();
+  }
+
+  /* ── Intermission mode for championship between tracks ─────────────────── */
+  startIntermission(intermissionSeconds, finishPayload) {
+    this.state = 'intermission';
+
+    // Ensure all previous projectiles and hazards are wiped clean
+    if (this.itemSystem) {
+      this.itemSystem.clear();
+    }
+
+    // Send new track geometry to all clients
+    this.io.to(this.roomCode).emit(EV.TRACK_DATA, this.track);
+
+    // Initial broadcast so cars and boxes on the new circuit appear immediately
+    this._broadcastState();
+
+    // Emit championship intermission event with countdown and results
+    this.io.to(this.roomCode).emit(EV.CHAMPIONSHIP_INTERMISSION, {
+      seconds: intermissionSeconds,
+      nextTrackId: this.settings.trackId,
+      nextTrackName: finishPayload.nextTrackName,
+      raceNumber: finishPayload.raceNumber + 1,
+      totalRaces: finishPayload.totalRaces,
+      results: finishPayload.results,
+      standings: finishPayload.standings,
+    });
+
+    // Start physics/broadcast loop (during intermission, cars do not move)
+    const dt = 1 / PHY.TICK_RATE_HZ;
+    if (!this.interval) {
+      this.interval = setInterval(() => {
+        this.tick(dt);
+      }, PHY.TICK_MS);
+    }
+  }
+
+  startCountdown() {
+    this.state = 'countdown';
+    let countdown = PHY.COUNTDOWN_SECONDS || 3;
+    this.io.to(this.roomCode).emit(EV.GAME_COUNTDOWN, { seconds: countdown });
+
+    if (this.countdownInterval) {
+      clearInterval(this.countdownInterval);
+      this.countdownInterval = null;
+    }
+
+    this.countdownInterval = setInterval(() => {
+      countdown--;
+      if (countdown > 0) {
+        this.io.to(this.roomCode).emit(EV.GAME_COUNTDOWN, { seconds: countdown });
+      } else {
+        clearInterval(this.countdownInterval);
+        this.countdownInterval = null;
+        this.state = 'racing';
+        this.raceStartTick = this.tickCount;
+        this.startTime = Date.now();
+        console.log(`[game] Race started in room ${this.roomCode}`);
+      }
+    }, 1000);
   }
 
   /* ── Stop the game loop ───────────────────────────────────────────────── */
@@ -215,6 +269,10 @@ class GameRoom {
     if (this.interval) {
       clearInterval(this.interval);
       this.interval = null;
+    }
+    if (this.countdownInterval) {
+      clearInterval(this.countdownInterval);
+      this.countdownInterval = null;
     }
     if (this.itemSystem) {
       this.itemSystem.clear();
@@ -226,6 +284,7 @@ class GameRoom {
   setInput(seatToken, inputs) {
     const car = this.cars.get(seatToken);
     if (!car) return;
+    if (this.state !== 'racing') return;
     const hasSteerSequence = Number.isFinite(inputs.steerSeq);
     if (!hasSteerSequence || inputs.steerSeq > car.steerSeq) {
       car.input.steer = Math.max(-1, Math.min(1, Number(inputs.steer) || 0));

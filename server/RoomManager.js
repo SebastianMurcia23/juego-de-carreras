@@ -563,35 +563,29 @@ class RoomManager {
         });
         console.log(`[championship] Room ${roomCode} championship finished! Winner: ${payload.standings[0]?.name}`);
       } else {
-        const delayMs = (room.settings.intermissionSeconds || 12) * 1000;
-        if (room.intermissionTimer) clearTimeout(room.intermissionTimer);
-        room.intermissionTimer = setTimeout(() => {
-          this.advanceChampionship(roomCode);
-        }, delayMs);
-        console.log(`[championship] Room ${roomCode} scheduled next race in ${delayMs / 1000}s`);
+        // Automatically prepare and load next track simultaneously during intermission overlay
+        this.prepareNextChampionshipRace(roomCode, payload);
       }
     }
   }
 
-  advanceChampionship(roomCode, hostToken = null) {
+  prepareNextChampionshipRace(roomCode, finishPayload = null) {
     const room = this.rooms.get(roomCode);
     if (!room) return { error: 'ROOM_NOT_FOUND' };
-    if (hostToken && !this.validateHostToken(roomCode, hostToken)) {
-      return { error: 'UNAUTHORIZED' };
-    }
+
     if (room.intermissionTimer) {
       clearTimeout(room.intermissionTimer);
       room.intermissionTimer = null;
-    }
-
-    if (room.settings.mode !== 'championship') {
-      return { error: 'NOT_CHAMPIONSHIP' };
     }
 
     room.championship.raceNumber++;
     const trackOrder = room.settings.trackOrder || TRACKS.map(t => t.id);
     if (room.championship.raceNumber >= trackOrder.length) {
       room.state = 'championship_finished';
+      this.io.to(roomCode).emit(EV.CHAMPIONSHIP_FINISHED, {
+        standings: finishPayload?.standings || [],
+        totalRaces: trackOrder.length,
+      });
       return { success: true, finished: true };
     }
 
@@ -609,32 +603,64 @@ class RoomManager {
       seat.isReady = true;
     }
 
-    room.state = STATES.ROOM.COUNTDOWN;
-
-    this.io.to(roomCode).emit(EV.GAME_STARTING, {
-      countdownSeconds: 3,
-      trackId: nextTrackId,
-      mode: 'championship',
-      raceNumber: room.championship.raceNumber + 1,
-      totalRaces: trackOrder.length,
-      laps: room.settings.laps,
-      players: this._playerList(roomCode),
-    });
+    room.state = 'intermission';
+    const intermissionSeconds = room.settings.intermissionSeconds || 12;
 
     try {
       room.gameRoom = new GameRoom(this.io, roomCode, room);
       room.gameRoom.onFinish = (payload) => {
         this._handleRaceFinished(roomCode, payload);
       };
-      room.gameRoom.start();
-      room.state = STATES.ROOM.RACING;
-      console.log(`[championship] Room ${roomCode} started race ${room.championship.raceNumber + 1}/${trackOrder.length} (${nextTrackId})`);
+
+      // Load new circuit, position cars on starting grid, and broadcast intermission
+      room.gameRoom.startIntermission(intermissionSeconds, finishPayload);
+
+      // Auto-advance when intermission ends
+      const delayMs = intermissionSeconds * 1000;
+      room.intermissionTimer = setTimeout(() => {
+        this.startChampionshipRace(roomCode);
+      }, delayMs);
+
+      console.log(`[championship] Room ${roomCode} loaded next track (${nextTrackId}) in intermission (${intermissionSeconds}s)`);
     } catch (e) {
-      console.error('[championship] Failed to start next race:', e);
+      console.error('[championship] Failed to prepare next race:', e);
       return { error: 'START_FAILED' };
     }
 
     return { success: true, raceNumber: room.championship.raceNumber + 1, trackId: nextTrackId };
+  }
+
+  startChampionshipRace(roomCode) {
+    const room = this.rooms.get(roomCode);
+    if (!room) return;
+    if (room.intermissionTimer) {
+      clearTimeout(room.intermissionTimer);
+      room.intermissionTimer = null;
+    }
+    if (!room.gameRoom) return;
+
+    room.state = STATES.ROOM.COUNTDOWN;
+    room.gameRoom.startCountdown();
+  }
+
+  advanceChampionship(roomCode, hostToken = null) {
+    const room = this.rooms.get(roomCode);
+    if (!room) return { error: 'ROOM_NOT_FOUND' };
+    if (hostToken && !this.validateHostToken(roomCode, hostToken)) {
+      return { error: 'UNAUTHORIZED' };
+    }
+    if (room.settings.mode !== 'championship') {
+      return { error: 'NOT_CHAMPIONSHIP' };
+    }
+
+    // If already in intermission with new track loaded, skip intermission and start countdown
+    if (room.state === 'intermission' && room.gameRoom) {
+      this.startChampionshipRace(roomCode);
+      return { success: true, skippedIntermission: true };
+    }
+
+    // Otherwise prepare next race directly
+    return this.prepareNextChampionshipRace(roomCode);
   }
 
   /* ── Stage 3: Get active game room ─────────────────────────────────────── */

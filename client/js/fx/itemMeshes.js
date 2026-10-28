@@ -92,8 +92,14 @@ function makeOil() {
   return g;
 }
 
-/* ── Item box ────────────────────────────────────────────────────────────── */
 var _boxMat = null;
+function resetMaterials() {
+  if (_boxMat) {
+    try { _boxMat.dispose(); } catch (e) {}
+    _boxMat = null;
+  }
+}
+
 function _getBoxMat() {
   if (_boxMat) return _boxMat;
   _boxMat = new THREE.MeshLambertMaterial({
@@ -119,10 +125,11 @@ function animateBoxMat(T) {
 
 /* ── Export ────────────────────────────────────────────────────────────── */
 window.ITEM_MESHES = {
-  makeDisc:      makeDisc,
-  makeMissile:   makeMissile,
-  makeOil:       makeOil,
-  makeBox:       makeBox,
-  animateBoxMat: animateBoxMat,
+  makeDisc:       makeDisc,
+  makeMissile:    makeMissile,
+  makeOil:        makeOil,
+  makeBox:        makeBox,
+  animateBoxMat:  animateBoxMat,
+  resetMaterials: resetMaterials,
 };
 })();

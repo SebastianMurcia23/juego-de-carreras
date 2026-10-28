@@ -41,13 +41,22 @@
   };
 
   function init(canvasId, seat) {
+    R.seat = seat;
+    R.canvas = document.getElementById(canvasId);
+    if (!R.canvas) return;
+
+    if (R.renderer && R.glCanvas && R.glCanvas.parentNode && R.scene) {
+      R.running = true;
+      R.fallbackMode = false;
+      R.canvas.style.visibility = 'hidden';
+      resize();
+      return;
+    }
+
     R.running = false;
     R.fallbackMode = false;
     if (R.glCanvas && R.glCanvas.parentNode) R.glCanvas.parentNode.removeChild(R.glCanvas);
     if (R.hud && R.hud.parentNode) R.hud.parentNode.removeChild(R.hud);
-    R.canvas = document.getElementById(canvasId);
-    R.seat = seat;
-    if (!R.canvas) return;
     try {
       R.glCanvas = document.createElement('canvas');
       R.glCanvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;';
@@ -456,21 +465,105 @@
     addPickupBoxes(track);
   }
 
-  function setTrack(track) {
+  function adjustSceneForTrack(track) {
+    if (!track || !R.scene || !R.camera) return;
+    var b = track.bounds || { minX: -1500, maxX: 1500, minY: -1500, maxY: 1500 };
+    var spanX = Math.max(1000, b.maxX - b.minX);
+    var spanY = Math.max(1000, b.maxY - b.minY);
+    var maxSpan = Math.max(spanX, spanY);
+
+    R.camera.near = 0.5;
+    R.camera.far = Math.max(12000, maxSpan * 3.5);
+    R.camera.updateProjectionMatrix();
+
+    if (R.scene.fog) {
+      R.scene.fog.near = Math.max(1500, maxSpan * 0.4);
+      R.scene.fog.far  = Math.max(7000, maxSpan * 2.2);
+    }
+
+    if (R.sun && R.sun.shadow && R.sun.shadow.camera) {
+      var shc = R.sun.shadow.camera;
+      var halfSpan = Math.max(700, maxSpan * 0.45);
+      shc.left   = -halfSpan;
+      shc.right  =  halfSpan;
+      shc.top    =  halfSpan;
+      shc.bottom = -halfSpan;
+      shc.near   =  10;
+      shc.far    =  Math.max(4000, maxSpan * 2);
+      shc.updateProjectionMatrix();
+    }
+
+    var startCp = track.checkpoints && track.checkpoints[0];
+    var nextCp = track.checkpoints && track.checkpoints[1];
+    if (startCp) {
+      var dx = nextCp ? nextCp.x - startCp.x : 100;
+      var dy = nextCp ? nextCp.y - startCp.y : 0;
+      var ang = Math.atan2(-dy, dx);
+      if (!R._camPos) R._camPos = new THREE.Vector3();
+      if (!R._camLook) R._camLook = new THREE.Vector3();
+      R._camPos.set(startCp.x - Math.cos(ang) * 90, 45, -startCp.y - Math.sin(ang) * 90);
+      R._camLook.set(startCp.x, 10, -startCp.y);
+    }
+  }
+
+  function resetForNewRace(track) {
     if (R.fallbackMode && canvasRendererFallback) {
-      canvasRendererFallback.setTrack(track);
+      if (canvasRendererFallback.resetForNewRace) canvasRendererFallback.resetForNewRace(track);
+      else canvasRendererFallback.setTrack(track);
       return;
     }
+    if (!track) return;
     R.track = track;
+
+    // 1. Safely dispose previous track meshes
+    if (window.ITEM_MESHES && window.ITEM_MESHES.resetMaterials) {
+      window.ITEM_MESHES.resetMaterials();
+    }
     clearGroup(R.roadGroup);
+    clearGroup(R.projectileGroup);
+    clearGroup(R.powerEffectGroup);
+    clearGroup(R.carGroup);
+
+    // 2. Clear particles
+    if (window.FX_PARTICLES && window.FX_PARTICLES.clear) {
+      window.FX_PARTICLES.clear();
+    }
+
+    // 3. Reset maps and caches
+    R.cars = {};
+    R.itemBoxMeshes = {};
+    R.discMeshes = {};
+    R.missileMeshes = {};
+    R.oilMeshes = {};
+    R.projectiles = [];
+    R.powerEffects = [];
     R.pickupMeshes = [];
     R.clouds = [];
-    if (!track || !track.checkpoints) return;
+    R.arrivals = [];
+    R._stunPrev = {};
+    R.state = null;
+
+    // 4. Build track
     if (ARCADE) {
       buildArcadeTrack(track);
     } else {
       buildClassicTrack(track);
     }
+
+    // 5. Adjust scene frustum, fog, shadows
+    adjustSceneForTrack(track);
+
+    // 6. Reset interpolation
+    R._camPos = null;
+    R._camLook = null;
+    R.stateReceivedAt = performance.now();
+    R._lastFrameTime = performance.now();
+    R.T = 0;
+    R._shake = 0;
+  }
+
+  function setTrack(track) {
+    resetForNewRace(track);
   }
 
   function getThemeStyle(theme) {
@@ -549,10 +642,27 @@
   function setCountdown(seconds) {
     if (R.fallbackMode && canvasRendererFallback) { canvasRendererFallback.setCountdown(seconds); return; }
     R.countdownEnd = Date.now() + seconds * 1000;
+    // When countdown starts for a new race, clear results overlay and intermission
+    R.results = null;
+    R.intermission = null;
   }
   function setResults(results) {
     if (R.fallbackMode && canvasRendererFallback) { canvasRendererFallback.setResults(results); return; }
     R.results = Array.isArray(results) ? { results: results } : results;
+    if (R.results && R.results.intermissionSeconds) {
+      R.intermissionEnd = Date.now() + R.results.intermissionSeconds * 1000;
+    }
+  }
+  function setIntermission(data) {
+    if (R.fallbackMode && canvasRendererFallback) {
+      if (canvasRendererFallback.setIntermission) canvasRendererFallback.setIntermission(data);
+      return;
+    }
+    R.intermission = data;
+    R.intermissionEnd = Date.now() + (data.seconds || 12) * 1000;
+    if (data.results || data.standings) {
+      R.results = data;
+    }
   }
   function stop() {
     R.running = false;
@@ -882,10 +992,15 @@
       var data = R.state.cars[i];
       var group = R.cars[data.st];
       seen[data.st] = true;
-      if (!group) {
+      if (!group || group.parent !== R.carGroup) {
+        if (group && group.parent) group.parent.remove(group);
         group = makeCar(data);
         R.cars[data.st] = group;
         R.carGroup.add(group);
+        if (R._warnThrottleCars !== (data.st + '_' + (R.track ? R.track.id : ''))) {
+          R._warnThrottleCars = data.st + '_' + (R.track ? R.track.id : '');
+          console.warn('[3D Safeguard] Reconstructed/attached car mesh in scene for:', data.nm || data.st);
+        }
       }
       var isLocal = (data.st === R.seat);
       var predictionSeconds = isLocal && R.stateReceivedAt
@@ -1092,11 +1207,16 @@
       var b = boxes[i];
       seen[b.id] = true;
       var mesh = R.itemBoxMeshes[b.id];
-      if (!mesh) {
+      if (!mesh || mesh.parent !== R.roadGroup) {
+        if (mesh && mesh.parent) mesh.parent.remove(mesh);
         if (!M || !M.makeBox) continue;
         mesh = M.makeBox();
         R.itemBoxMeshes[b.id] = mesh;
         R.roadGroup.add(mesh);
+        if (R._warnThrottleBoxes !== (b.id + '_' + (R.track ? R.track.id : ''))) {
+          R._warnThrottleBoxes = b.id + '_' + (R.track ? R.track.id : '');
+          console.warn('[3D Safeguard] Reconstructed/attached item box mesh in scene for id:', b.id);
+        }
       }
       mesh.position.set(b.x, (1.6 + Math.sin(R.T * 3 + b.id * 2) * 0.25) * kD, -b.y);
       mesh.rotation.y = R.T * 1.6;
@@ -1135,7 +1255,8 @@
       var disc = discs[d];
       seenDiscs[disc.id] = true;
       var dMesh = R.discMeshes[disc.id];
-      if (!dMesh) {
+      if (!dMesh || dMesh.parent !== R.roadGroup) {
+        if (dMesh && dMesh.parent) dMesh.parent.remove(dMesh);
         if (!M || !M.makeDisc) continue;
         dMesh = M.makeDisc();
         dMesh.scale.setScalar(kD);
@@ -1163,7 +1284,8 @@
       var miss = missiles[m];
       seenMissiles[miss.id] = true;
       var mMesh = R.missileMeshes[miss.id];
-      if (!mMesh) {
+      if (!mMesh || mMesh.parent !== R.roadGroup) {
+        if (mMesh && mMesh.parent) mMesh.parent.remove(mMesh);
         if (!M || !M.makeMissile) continue;
         mMesh = M.makeMissile();
         mMesh.scale.setScalar(kD);
@@ -1194,7 +1316,8 @@
       var oil = oils[o];
       seenOils[oil.id] = true;
       var oMesh = R.oilMeshes[oil.id];
-      if (!oMesh) {
+      if (!oMesh || oMesh.parent !== R.roadGroup) {
+        if (oMesh && oMesh.parent) oMesh.parent.remove(oMesh);
         if (!M || !M.makeOil) continue;
         oMesh = M.makeOil();
         R.oilMeshes[oil.id] = oMesh;
@@ -1418,6 +1541,12 @@
       ctx.fillStyle = '#ffb703';
       ctx.fillText(remain, innerWidth / 2, innerHeight / 2);
     }
+
+    // Results overlay (championship intermission or race finished)
+    if (R.results) {
+      drawResultsOverlay(ctx, innerWidth, innerHeight);
+    }
+
     ctx.restore();
   }
 
@@ -1467,6 +1596,141 @@
     ctx.fillText('MAPA', x + 8, y + size - 7);
   }
 
+  function drawResultsOverlay(ctx, W, H) {
+    if (!R.results) return;
+    var res = R.results.results || [];
+    var standings = R.results.standings || [];
+    var isChampionship = Boolean(R.results.totalRaces && R.results.totalRaces > 1);
+    var isFinished = Boolean(R.results.championshipFinished);
+
+    ctx.save();
+    // Semi-transparent backdrop so new circuit and grid are visible behind
+    ctx.fillStyle = 'rgba(7, 16, 29, 0.85)';
+    ctx.fillRect(0, 0, W, H);
+
+    var cardW = Math.min(W * 0.9, 780);
+    var cardH = Math.min(H * 0.86, 560);
+    var cardX = (W - cardW) / 2;
+    var cardY = (H - cardH) / 2;
+
+    // Card background
+    ctx.fillStyle = 'rgba(13, 24, 44, 0.94)';
+    ctx.strokeStyle = isFinished ? '#ffd700' : '#00f5d4';
+    ctx.lineWidth = 2;
+    if (ctx.roundRect) ctx.roundRect(cardX, cardY, cardW, cardH, 16);
+    else ctx.rect(cardX, cardY, cardW, cardH);
+    ctx.fill();
+    ctx.stroke();
+
+    // Title
+    ctx.textAlign = 'center';
+    ctx.fillStyle = isFinished ? '#ffd700' : '#ffffff';
+    ctx.font = 'bold ' + Math.max(18, Math.min(28, cardW * 0.04)) + 'px sans-serif';
+    var title = isFinished
+      ? '🏆 CLASIFICACIÓN FINAL DEL CAMPEONATO 🏆'
+      : (isChampionship
+        ? '🏁 RESULTADOS · CARRERA ' + (R.results.raceNumber || 1) + ' DE ' + R.results.totalRaces
+        : '🏁 RESULTADOS DE LA CARRERA');
+    ctx.fillText(title, W / 2, cardY + 42);
+
+    // Subtitle / Next track / Intermission countdown
+    var nextTrack = R.results.nextTrackName || (R.intermission && R.intermission.nextTrackName);
+    var remSec = R.intermissionEnd ? Math.max(0, Math.ceil((R.intermissionEnd - Date.now()) / 1000)) : (R.results.intermissionSeconds || 12);
+    if (!isFinished && nextTrack) {
+      ctx.fillStyle = '#00f5d4';
+      ctx.font = 'bold 15px sans-serif';
+      ctx.fillText('⏱️ Siguiente circuito: ' + nextTrack + '  ·  Comenzando en ' + remSec + 's', W / 2, cardY + 70);
+    } else if (isFinished) {
+      ctx.fillStyle = '#f72585';
+      ctx.font = 'bold 15px sans-serif';
+      ctx.fillText('¡Felicidades a todos los pilotos por completar el campeonato!', W / 2, cardY + 70);
+    }
+
+    // Table Header
+    var tableY = cardY + 98;
+    var colPlace = cardX + 36;
+    var colName = cardX + 110;
+    var colTime = cardX + cardW * 0.52;
+    var colPts = cardX + cardW * 0.72;
+    var colTot = cardX + cardW - 46;
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('POS', colPlace, tableY);
+    ctx.fillText('PILOTO', colName, tableY);
+    ctx.textAlign = 'center';
+    ctx.fillText('TIEMPO', colTime, tableY);
+    ctx.fillText('+PTS', colPts, tableY);
+    ctx.textAlign = 'right';
+    ctx.fillText('TOTAL', colTot, tableY);
+
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cardX + 24, tableY + 8);
+    ctx.lineTo(cardX + cardW - 24, tableY + 8);
+    ctx.stroke();
+
+    // Rows
+    var list = isFinished && standings.length > 0 ? standings : (res.length > 0 ? res : standings);
+    var rowH = Math.min(36, (cardH - 170) / Math.max(1, Math.min(list.length, 10)));
+    var startRowY = tableY + 28;
+
+    for (var rIdx = 0; rIdx < list.length && rIdx < 10; rIdx++) {
+      var item = list[rIdx];
+      var rowY = startRowY + rIdx * rowH;
+      var standing = standings.find(function(s) { return s.seatToken === item.seatToken; }) || item;
+      var pColor = (item.place === 1 || rIdx === 0) ? '#ffd700' :
+                   (item.place === 2 || rIdx === 1) ? '#e0e0e0' :
+                   (item.place === 3 || rIdx === 2) ? '#cd7f32' : '#8899aa';
+
+      // Alternate row highlight
+      if (rIdx % 2 === 0) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+        ctx.fillRect(cardX + 20, rowY - 18, cardW - 40, rowH);
+      }
+
+      // Place
+      ctx.font = 'bold 14px sans-serif';
+      ctx.fillStyle = pColor;
+      ctx.textAlign = 'left';
+      var medal = (item.place === 1 || rIdx === 0) ? '🥇 ' :
+                  (item.place === 2 || rIdx === 1) ? '🥈 ' :
+                  (item.place === 3 || rIdx === 2) ? '🥉 ' : '';
+      ctx.fillText(medal + 'P' + (item.place || (rIdx + 1)), colPlace, rowY);
+
+      // Name
+      ctx.fillStyle = item.seatToken === R.seat ? '#00f5d4' : '#ffffff';
+      ctx.fillText(item.name || 'Piloto', colName, rowY);
+
+      // Time / DNF
+      ctx.textAlign = 'center';
+      ctx.fillStyle = item.dnf ? '#e63946' : 'rgba(255, 255, 255, 0.75)';
+      var timeStr = item.dnf ? 'DNF' : (item.time ? (item.time / 1000).toFixed(1) + 's' : '—');
+      ctx.fillText(timeStr, colTime, rowY);
+
+      // Points
+      ctx.fillStyle = '#ffb703';
+      ctx.fillText('+' + (item.points || 0), colPts, rowY);
+
+      // Total Points
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#00f5d4';
+      ctx.fillText((standing.points || item.points || 0) + ' pts', colTot, rowY);
+    }
+
+    // Host skip notice at bottom
+    if (!isFinished) {
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+      ctx.font = '12px sans-serif';
+      ctx.fillText('El anfitrión puede presionar "Siguiente pista" en su control para iniciar ahora', W / 2, cardY + cardH - 18);
+    }
+
+    ctx.restore();
+  }
+
   function getLocal() {
     if (!R.state || !R.state.cars) return null;
     return R.state.cars.find(function(c) { return c.st === R.seat; }) || R.state.cars[0];
@@ -1490,13 +1754,71 @@
     return ({ dirt: '#76533a', grass: '#384b36', sand: '#8a7547', mud: '#443426', ice: '#789eae' })[type] || '#343941';
   }
 
+  window.__rrDebugScene = function() {
+    var carsTotal = Object.keys(R.cars).length;
+    var carsVisible = 0;
+    var carsInScene = 0;
+    Object.keys(R.cars).forEach(function(k) {
+      var c = R.cars[k];
+      if (c && c.visible) carsVisible++;
+      if (c && c.parent === R.carGroup) carsInScene++;
+    });
+
+    var boxesTotal = Object.keys(R.itemBoxMeshes).length;
+    var boxesVisible = 0;
+    var boxesInScene = 0;
+    Object.keys(R.itemBoxMeshes).forEach(function(k) {
+      var b = R.itemBoxMeshes[k];
+      if (b && b.visible) boxesVisible++;
+      if (b && b.parent === R.roadGroup) boxesInScene++;
+    });
+
+    var projectileCount = (R.projectileGroup ? R.projectileGroup.children.length : 0) +
+      Object.keys(R.discMeshes).length +
+      Object.keys(R.missileMeshes).length +
+      Object.keys(R.oilMeshes).length;
+
+    var materialsStatus = {
+      boxMaterialReady: Boolean(window.ITEM_MESHES),
+      sceneChildren: R.scene ? R.scene.children.length : 0,
+      carGroupChildren: R.carGroup ? R.carGroup.children.length : 0,
+      roadGroupChildren: R.roadGroup ? R.roadGroup.children.length : 0,
+    };
+
+    return {
+      currentTrackId: R.track ? R.track.id : null,
+      trackId: R.track ? R.track.id : null,
+      trackName: R.track ? R.track.name : null,
+      carCount: carsInScene,
+      carsCount: carsTotal,
+      carsVisibleCount: carsVisible,
+      carsInScene: carsInScene,
+      itemBoxCount: boxesInScene,
+      boxesCount: boxesTotal,
+      boxesVisibleCount: boxesVisible,
+      boxesInScene: boxesInScene,
+      projectileCount: projectileCount,
+      activeMaterialsCount: materialsStatus,
+      rendererActive: Boolean(R.animId && R.renderer),
+      cameraPosition: R.camera ? {
+        x: +(R.camera.position.x.toFixed(1)),
+        y: +(R.camera.position.y.toFixed(1)),
+        z: +(R.camera.position.z.toFixed(1)),
+      } : null,
+      resultsActive: Boolean(R.results),
+      intermissionActive: Boolean(R.intermission),
+    };
+  };
+
   window.GAME_RENDERER = {
     init: init,
     stop: stop,
     setTrack: setTrack,
+    resetForNewRace: resetForNewRace,
     setGameState: setGameState,
     setCountdown: setCountdown,
     setResults: setResults,
+    setIntermission: setIntermission,
     triggerPowerEffect: triggerPowerEffect,
     showToast: showToast,
     showInk: showInk,
@@ -1508,6 +1830,7 @@
         R.arrivals.push(arrival);
       }
     },
-    getLocalCar: getLocal
+    getLocalCar: getLocal,
+    debugScene: window.__rrDebugScene
   };
 })();

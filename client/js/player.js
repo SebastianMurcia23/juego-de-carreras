@@ -402,6 +402,28 @@ function initSocket() {
     toast(data.championshipFinished ? '🏆 ¡Campeonato finalizado!' : '🏆 ¡Carrera finalizada!', 'success', 8000);
   });
 
+  socket.on(EV.CHAMPIONSHIP_INTERMISSION, (data) => {
+    if (window.GAME_RENDERER && window.GAME_RENDERER.setIntermission) {
+      window.GAME_RENDERER.setIntermission(data);
+    }
+  });
+
+  socket.on(EV.CHAMPIONSHIP_FINISHED, (data) => {
+    if (window.GAME_RENDERER && window.GAME_RENDERER.setResults) {
+      window.GAME_RENDERER.setResults({ ...data, championshipFinished: true });
+    }
+    toast('🏆 ¡CAMPEONATO FINALIZADO! Podio definitivo.', 'success', 10000);
+  });
+
+  socket.on(EV.CAR_FINISHED, (data) => {
+    if (window.GAME_RENDERER && window.GAME_RENDERER.setArrival) {
+      window.GAME_RENDERER.setArrival(data);
+    }
+    if (data && data.name) {
+      toast(`🏁 ${data.name} llegó en P${data.place}`, 'success', 3500);
+    }
+  });
+
   socket.on(EV.PLAYER_KICKED, ({ message }) => {
     $('error-msg').textContent = message || 'Has sido expulsado de la sala.';
     showState('error');
