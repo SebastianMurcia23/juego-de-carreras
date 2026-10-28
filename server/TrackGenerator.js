@@ -7,6 +7,25 @@
 
 const SHARED = require('../shared/constants');
 const PHY    = SHARED.PHYSICS;
+const FLAGS  = require('../config/feature-flags');
+const GEO_TRACKS = require('../config/tracks-geo.json');
+
+function trackTheme(trackConfig, geoTrack) {
+  const id = String((geoTrack && geoTrack.id) || (trackConfig && trackConfig.id) || '').toLowerCase();
+  const terrain = String((trackConfig && trackConfig.terrain) || '').toLowerCase();
+  if (/ae|qa|bh|sa|az|mx/.test(id) || /arena|tierra|desierto|seco|calido/.test(terrain)) return 'desert';
+  if (/mc|sg|az|au|ca|it|es/.test(id) || /urbano|ciudad|metal|puerto/.test(terrain)) return 'urban';
+  if (/be|gb|nl|de|at|hu|jp|ch/.test(id) || /bosque|verde|humedo|lluvia/.test(terrain)) return 'forest';
+  if (/br|za|my|tr|pt/.test(id) || /costa|tropical|playa|mar/.test(terrain)) return 'coastal';
+  return 'classic';
+}
+
+function scalePoint(point) {
+  return {
+    x: point.x * PHY.TRACK_LENGTH_SCALE,
+    y: point.y * PHY.TRACK_LENGTH_SCALE,
+  };
+}
 
 /**
  * Generate a closed-loop track with checkpoints.
@@ -18,6 +37,11 @@ const PHY    = SHARED.PHYSICS;
  * @returns {object} trackData
  */
 function generateTrack(trackConfig, playerCount) {
+  if (FLAGS.USE_F1_TRACKS_AND_CARS && trackConfig && trackConfig.enabled) {
+    const geoTrack = GEO_TRACKS.tracks.find(track => track.id === trackConfig.id);
+    if (geoTrack) return generateGeoTrack(trackConfig, geoTrack, playerCount);
+  }
+
   const id           = trackConfig.id;
   const numCPs       = trackConfig.checkpointsCount || 16;
   const lengthMeters = trackConfig.lengthMeters || 1500;
@@ -49,10 +73,140 @@ function generateTrack(trackConfig, playerCount) {
 
     checkpoints.push({
       index: i,
-      x: Math.round(x),
-      y: Math.round(y),
+      x: Math.round(x * PHY.TRACK_LENGTH_SCALE),
+      y: Math.round(y * PHY.TRACK_LENGTH_SCALE),
       terrain,
     });
+  }
+
+  /**
+   * Adapt prebuilt local-metre geometry to the existing track_data contract.
+   * The remaining gameplay objects intentionally use the same generation rules
+   * as legacy tracks so physics and pickup behavior remain unchanged.
+   */
+  function generateGeoTrack(trackConfig, geoTrack, playerCount) {
+    const checkpoints = geoTrack.geometry.map((point, index) => {
+      const scaled = scalePoint(point);
+      const next = scalePoint(geoTrack.geometry[(index + 1) % geoTrack.geometry.length]);
+      return {
+        index,
+        x: scaled.x,
+        y: scaled.y,
+        angle: Math.atan2(next.y - scaled.y, next.x - scaled.x),
+        terrain: pickTerrain(trackConfig, index, geoTrack.geometry.length, hashString(geoTrack.id)),
+      };
+    });
+
+    const bounds = checkpoints.reduce((result, point) => ({
+      minX: Math.min(result.minX, point.x),
+      minY: Math.min(result.minY, point.y),
+      maxX: Math.max(result.maxX, point.x),
+      maxY: Math.max(result.maxY, point.y),
+    }), {
+      minX: Infinity,
+      minY: Infinity,
+      maxX: -Infinity,
+      maxY: -Infinity,
+    });
+
+    const startPositions = [];
+    const startCP = checkpoints[0];
+    const startAngle = startCP.angle;
+    const centerlineLength = checkpoints.reduce((total, point, index) =>
+      total + Math.hypot(
+        checkpoints[(index + 1) % checkpoints.length].x - point.x,
+        checkpoints[(index + 1) % checkpoints.length].y - point.y
+      ), 0);
+
+    function pointBehindStart(distanceBack) {
+      let remaining = distanceBack % centerlineLength;
+      let currentIndex = 0;
+      while (currentIndex < checkpoints.length) {
+        const current = checkpoints[currentIndex];
+        const previousIndex = (currentIndex - 1 + checkpoints.length) % checkpoints.length;
+        const previous = checkpoints[previousIndex];
+        const segmentLength = Math.hypot(current.x - previous.x, current.y - previous.y);
+        if (remaining <= segmentLength) {
+          const ratio = segmentLength ? remaining / segmentLength : 0;
+          const x = current.x + (previous.x - current.x) * ratio;
+          const y = current.y + (previous.y - current.y) * ratio;
+          const angle = Math.atan2(current.y - previous.y, current.x - previous.x);
+          return { x, y, angle };
+        }
+        remaining -= segmentLength;
+        currentIndex = previousIndex;
+      }
+      return { x: startCP.x, y: startCP.y, angle: startAngle };
+    }
+
+    for (let i = 0; i < Math.max(playerCount, 12); i++) {
+      const row = Math.floor(i / 4);
+      const col = i % 4;
+      const lateralOffset = (col - 1.5) * 40;  // cols: -60, -20, +20, +60 (within ±92 half-width)
+      const rowPoint = pointBehindStart((row + 1) * 55);  // extra spacing keeps cars behind
+      // Use the global start angle (CP[0]) for the lateral offset so ALL starts are
+      // guaranteed to lie behind the finish line regardless of curve at that point.
+      const perpAngle = startAngle + Math.PI / 2;
+      startPositions.push({
+        x: rowPoint.x + Math.cos(perpAngle) * lateralOffset,
+        y: rowPoint.y + Math.sin(perpAngle) * lateralOffset,
+        angle: rowPoint.angle,
+      });
+    }
+
+    const boostPads = [];
+    const padStep = Math.max(8, Math.floor(checkpoints.length / 5));
+    for (let i = Math.floor(padStep / 2); i < checkpoints.length - 2; i += padStep) {
+      const point = checkpoints[i];
+      boostPads.push({
+        id: `pad_${i}`,
+        x: point.x,
+        y: point.y,
+        angle: point.angle,
+        w: 44,
+        h: 28,
+      });
+    }
+
+    const pickups = [];
+    const pickupTypes = ['item_box'];
+    const pickupStep = Math.max(8, Math.floor(checkpoints.length / 7));
+    for (let i = 3, typeIndex = 0; i < checkpoints.length - 1; i += pickupStep, typeIndex++) {
+      const point = checkpoints[i];
+      const perpendicular = point.angle + Math.PI / 2;
+      // Keep boxes off the racing line, but inside the usable road margin.
+      // The pseudo-random lane changes per track/index without desyncing clients.
+      const laneSeed = Math.abs(Math.sin((i + 1) * 12.9898 + geoTrack.id.length * 78.233));
+      const side = laneSeed > 0.5 ? 1 : -1;
+      const lateralRatio = 0.12 + laneSeed * 0.13;
+      const lateral = side * PHY.TRACK_RENDER_HALF_WIDTH * lateralRatio;
+      pickups.push({
+        id: `pk_${i}`,
+        type: pickupTypes[typeIndex % pickupTypes.length],
+        x: Math.round(point.x + Math.cos(perpendicular) * lateral),
+        y: Math.round(point.y + Math.sin(perpendicular) * lateral),
+      });
+    }
+
+    return {
+      id: geoTrack.id,
+      name: trackConfig.name,
+      color: trackConfig.color,
+      theme: trackTheme(trackConfig, geoTrack),
+      checkpoints,
+      numCheckpoints: checkpoints.length,
+      startPositions,
+      boostPads,
+      pickups,
+      roadHalfWidth: PHY.TRACK_RENDER_HALF_WIDTH,
+      laneCount: PHY.TRACK_LANE_COUNT,
+      bounds: {
+        minX: bounds.minX - 200,
+        minY: bounds.minY - 200,
+        maxX: bounds.maxX + 200,
+        maxY: bounds.maxY + 200,
+      },
+    };
   }
 
   // Smooth the checkpoints with Catmull-Rom to get a nicer curve
@@ -82,9 +236,9 @@ function generateTrack(trackConfig, playerCount) {
   const perpAngle  = startAngle + Math.PI / 2;
 
   for (let i = 0; i < Math.max(playerCount, 12); i++) {
-    const row = Math.floor(i / 2);
-    const col = i % 2;
-    const lateralOffset = (col === 0 ? -1 : 1) * 22;
+    const row = Math.floor(i / 4);
+    const col = i % 4;
+    const lateralOffset = (col - 1.5) * 40;  // cols: -60, -20, +20, +60 (within ±92 half-width)
     const backOffset    = -(row + 1) * 50;
 
     startPositions.push({
@@ -109,24 +263,22 @@ function generateTrack(trackConfig, playerCount) {
     });
   }
 
-  // Generate Pickups (repair, ammo, shield, nitro)
+  // Generate arcade item boxes; the server rolls the actual power on pickup.
   const pickups = [];
-  const pickupTypes = ['repair', 'ammo', 'shield', 'nitro'];
-  const pkStep = Math.max(6, Math.floor(smoothed.length / 8));
-  let typeIdx = 0;
+  const pkStep = Math.max(8, Math.floor(smoothed.length / 7));
 
   for (let i = 3; i < smoothed.length - 1; i += pkStep) {
     const cp = smoothed[i];
     // Slightly offset from exact center for variety
     const perp = cp.angle + Math.PI / 2;
-    const lateral = ((i % 2 === 0) ? 1 : -1) * (PHY.ROAD_HALF_WIDTH * 0.35);
+    const seed = Math.abs(Math.sin((i + 1) * 12.9898 + id.length * 78.233));
+    const lateral = (seed > 0.5 ? 1 : -1) * PHY.TRACK_RENDER_HALF_WIDTH * (0.12 + seed * 0.13);
     pickups.push({
       id:    `pk_${i}`,
-      type:  pickupTypes[typeIdx % pickupTypes.length],
+      type:  'item_box',
       x:     Math.round(cp.x + Math.cos(perp) * lateral),
       y:     Math.round(cp.y + Math.sin(perp) * lateral),
     });
-    typeIdx++;
   }
 
   return {
@@ -138,7 +290,9 @@ function generateTrack(trackConfig, playerCount) {
     startPositions,
     boostPads,
     pickups,
-    roadHalfWidth:  PHY.ROAD_HALF_WIDTH,
+    roadHalfWidth:  PHY.TRACK_RENDER_HALF_WIDTH,
+    laneCount: PHY.TRACK_LANE_COUNT,
+    theme: trackTheme(trackConfig, { id }),
     bounds: { minX: minX - 200, minY: minY - 200, maxX: maxX + 200, maxY: maxY + 200 },
   };
 }

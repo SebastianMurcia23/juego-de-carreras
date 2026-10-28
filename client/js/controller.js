@@ -58,6 +58,7 @@ const S = {
     brake:  false,
     fire:   false,
     drift:  false,
+    power:  false,
   },
   lastSpeed:       0,
   stuckSince:      null,
@@ -98,14 +99,23 @@ function getSeatToken() {
 
 /* ─── Mobile Loadout Selection UI ────────────────────────────────────────── */
 function initMobileSelectionUI() {
+  const ARCADE = Boolean(window.ROAD_RUMBLE_FLAGS && window.ROAD_RUMBLE_FLAGS.ARCADE_ITEMS !== false);
   $('ctrl-player-label').textContent = S.playerName || 'Piloto';
+
+  if (ARCADE) {
+    // Hide weapon selection card in mobile UI
+    const weaponCards = document.querySelectorAll('#state-mobile-selection .ctrl-car-card');
+    if (weaponCards.length > 1) weaponCards[1].style.display = 'none';
+  }
+
   updateMobileCarDisplay();
-  updateMobileWeaponDisplay();
+  if (!ARCADE) updateMobileWeaponDisplay();
 }
 
 function updateMobileCarDisplay() {
   const car = CARS[S.selectedCarIndex];
   if (!car) return;
+  const ARCADE = Boolean(window.ROAD_RUMBLE_FLAGS && window.ROAD_RUMBLE_FLAGS.ARCADE_ITEMS !== false);
 
   $('ctrl-car-name').textContent = car.name;
   $('ctrl-car-role').textContent = `${car.role} · ${car.tagline}`;
@@ -114,7 +124,7 @@ function updateMobileCarDisplay() {
   if (canvas && window.CAR_RENDERER) {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const weapon = WEAPONS.find(w => w.id === S.selectedWeaponId);
+    const weapon = ARCADE ? null : WEAPONS.find(w => w.id === S.selectedWeaponId);
     window.CAR_RENDERER.drawCar(ctx, canvas.width / 2, canvas.height / 2, car, weapon, 0, 1.1);
   }
 }
@@ -130,7 +140,43 @@ function updateMobileWeaponDisplay() {
   if (fireLabel) fireLabel.textContent = weapon.name;
 }
 
+function updateConfirmationUI() {
+  const btnReady = $('btn-ctrl-ready');
+  const btnUnlock = $('btn-ctrl-unlock');
+  const badge = $('ctrl-confirmed-badge');
+  const prevBtn = $('btn-ctrl-car-prev');
+  const nextBtn = $('btn-ctrl-car-next');
+
+  if (S.isReady) {
+    if (btnReady) {
+      btnReady.classList.add('is-ready');
+      btnReady.innerHTML = '✓ Vehículo Confirmado';
+      btnReady.style.background = '#00f5d4';
+      btnReady.style.color = '#000';
+    }
+    if (btnUnlock) btnUnlock.classList.remove('hidden');
+    if (badge) badge.classList.remove('hidden');
+    if (prevBtn) { prevBtn.disabled = true; prevBtn.style.opacity = '0.35'; prevBtn.style.pointerEvents = 'none'; }
+    if (nextBtn) { nextBtn.disabled = true; nextBtn.style.opacity = '0.35'; nextBtn.style.pointerEvents = 'none'; }
+  } else {
+    if (btnReady) {
+      btnReady.classList.remove('is-ready');
+      btnReady.innerHTML = '🏎️ Confirmar Vehículo';
+      btnReady.style.background = '';
+      btnReady.style.color = '';
+    }
+    if (btnUnlock) btnUnlock.classList.add('hidden');
+    if (badge) badge.classList.add('hidden');
+    if (prevBtn) { prevBtn.disabled = false; prevBtn.style.opacity = ''; prevBtn.style.pointerEvents = ''; }
+    if (nextBtn) { nextBtn.disabled = false; nextBtn.style.opacity = ''; nextBtn.style.pointerEvents = ''; }
+  }
+}
+
 function selectMobileCar(delta) {
+  if (S.isReady) {
+    toast('Vehículo confirmado. Toca "Cambiar vehículo" para elegir otro.');
+    return;
+  }
   if (CARS.length === 0) return;
   S.selectedCarIndex = (S.selectedCarIndex + delta + CARS.length) % CARS.length;
   updateMobileCarDisplay();
@@ -138,6 +184,7 @@ function selectMobileCar(delta) {
 }
 
 function selectMobileWeapon(delta) {
+  if (S.isReady) return;
   if (WEAPONS.length === 0) return;
   const currentIdx = WEAPONS.findIndex(w => w.id === S.selectedWeaponId);
   const nextIdx = (currentIdx + delta + WEAPONS.length) % WEAPONS.length;
@@ -148,35 +195,40 @@ function selectMobileWeapon(delta) {
 }
 
 function toggleMobileReady() {
-  S.isReady = !S.isReady;
-  const btn = $('btn-ctrl-ready');
-  const hint = $('ctrl-ready-hint');
-
-  if (S.isReady) {
-    if (btn) { btn.classList.add('is-ready'); btn.textContent = '✅ ¡LISTO PARA CORRER!'; }
-    if (hint) hint.textContent = '¡Todo listo! Esperando inicio de la carrera...';
+  if (!S.isReady) {
+    // Confirm vehicle
+    syncLoadoutToServer();
+    S.isReady = true;
+    updateConfirmationUI();
+    if (S.socket && S.seatToken) {
+      S.socket.emit(EV.TOGGLE_READY, { seatToken: S.seatToken, isReady: true });
+    }
+    toast('✓ ¡Vehículo confirmado!', 'success', 2000);
   } else {
-    if (btn) { btn.classList.remove('is-ready'); btn.textContent = 'LISTO PARA CORRER'; }
-    if (hint) hint.textContent = 'Toca para confirmar. También puedes elegir desde el computador.';
+    // Already ready, prompt to unlock or toggle
+    unlockMobileVehicle();
   }
+}
 
+function unlockMobileVehicle() {
+  S.isReady = false;
+  updateConfirmationUI();
   if (S.socket && S.seatToken) {
-    S.socket.emit(EV.TOGGLE_READY, {
-      seatToken: S.seatToken,
-      isReady: S.isReady,
-    });
+    S.socket.emit(EV.TOGGLE_READY, { seatToken: S.seatToken, isReady: false });
   }
+  toast('Vehículo desbloqueado. Puedes cambiarlo.', 'info', 1800);
 }
 
 function syncLoadoutToServer() {
   if (!S.socket || !S.seatToken) return;
   const car = CARS[S.selectedCarIndex];
   if (!car) return;
+  const ARCADE = Boolean(window.ROAD_RUMBLE_FLAGS && window.ROAD_RUMBLE_FLAGS.ARCADE_ITEMS !== false);
 
   S.socket.emit(EV.SELECT_LOADOUT, {
     seatToken: S.seatToken,
     carId: car.id,
-    weaponId: S.selectedWeaponId,
+    weaponId: ARCADE ? null : S.selectedWeaponId,
   });
 }
 
@@ -248,8 +300,10 @@ function handleMotion(e) {
   const g = e.accelerationIncludingGravity;
   if (!g) return;
 
-  const gx = g.x || 0;
-  const gy = g.y || 0;
+  const gx = Number(g.x);
+  const gy = Number(g.y);
+  if (!Number.isFinite(gx) || !Number.isFinite(gy)) return;
+  if (Math.abs(gx) < 0.01 && Math.abs(gy) < 0.01) return;
 
   S.hasMotionData = true;
 
@@ -405,7 +459,7 @@ function requestGyroPermission() {
     }
   }, 800);
 
-  return true;
+  return Promise.resolve(true);
 }
 
 /* ─── Screen lock & WakeLock ─────────────────────────────────────────────── */
@@ -441,6 +495,7 @@ function setupTouchButtons() {
     { id: 'btn-accel', key: 'accel' },
     { id: 'btn-brake', key: 'brake' },
     { id: 'btn-fire',  key: 'fire' },
+    { id: 'btn-power', key: 'power' },
     { id: 'btn-drift', key: 'drift' },
   ];
 
@@ -491,7 +546,7 @@ function setupTouchButtons() {
 }
 
 function releaseAllTouchButtons() {
-  ['accel', 'brake', 'fire', 'drift'].forEach((key) => {
+  ['accel', 'brake', 'fire', 'drift', 'power'].forEach((key) => {
     S.inputs[key] = false;
     const button = $(`btn-${key}`);
     if (button) button.classList.remove('pressed');
@@ -504,7 +559,7 @@ function sendInputNow() {
   S.socket.emit(EV.CONTROLLER_INPUT, {
     seatToken: S.seatToken,
     steerSeq: S.steerSeq,
-    inputs: { ...S.inputs },
+    inputs: { ...S.inputs, steerSeq: S.steerSeq },
   });
 }
 
@@ -577,10 +632,7 @@ function initSocket() {
     socket.emit(EV.LINK_SEAT, { seatToken: S.seatToken, name: savedName });
 
     // Request gyro sensors if supported
-    requestGyroPermission().catch(() => {});
-
-    // IMMEDIATELY activate the fully functional controller
-    activateController();
+    requestGyroPermission();
   });
 
   socket.on('disconnect', () => {
@@ -590,11 +642,12 @@ function initSocket() {
     }
   });
 
-  socket.on(EV.SEAT_LINKED, ({ success, name, isHost, carId, weaponId }) => {
+  socket.on(EV.SEAT_LINKED, ({ success, name, isHost, carId, weaponId, isReady, roomState }) => {
     if (!success) return;
 
     S.playerName = name || 'Piloto';
     S.isHost     = isHost;
+    if (isReady != null) S.isReady = Boolean(isReady);
 
     if (carId) {
       const idx = CARS.findIndex(c => c.id === carId);
@@ -607,7 +660,13 @@ function initSocket() {
     $('reconnect-overlay')?.classList.add('hidden');
     $('hud-name').textContent = S.playerName;
 
-    activateController();
+    if (roomState === 'racing' || roomState === 'countdown') {
+      activateController();
+    } else {
+      showPhase('mobile-selection');
+      initMobileSelectionUI();
+      updateConfirmationUI();
+    }
   });
 
   socket.on(EV.LOADOUT_UPDATED, ({ carId, weaponId }) => {
@@ -622,11 +681,7 @@ function initSocket() {
 
   socket.on('ready_state_changed', ({ isReady }) => {
     S.isReady = Boolean(isReady);
-    const btn = $('btn-ctrl-ready');
-    if (btn) {
-      btn.classList.toggle('is-ready', S.isReady);
-      btn.textContent = S.isReady ? '✅ ¡LISTO PARA CORRER!' : 'LISTO PARA CORRER';
-    }
+    updateConfirmationUI();
   });
 
   socket.on(EV.GAME_STARTING, ({ countdownSeconds }) => {
@@ -640,23 +695,65 @@ function initSocket() {
     if (!myCar) return;
 
     const spdEl = $('hud-speed-val') || $('speed-number');
-    if (spdEl) spdEl.textContent = Math.round(myCar.spd || 0);
+    const speedFactor = window.SHARED?.PHYSICS?.SPEED_DISPLAY_FACTOR || 0.5;
+    if (spdEl) spdEl.textContent = Math.round((myCar.spd || 0) * speedFactor);
+    const backgroundSpeed = $('speed-number');
+    if (backgroundSpeed && backgroundSpeed !== spdEl) {
+      backgroundSpeed.textContent = Math.round((myCar.spd || 0) * speedFactor);
+    }
 
     const posEl = $('hud-pos');
     if (posEl) posEl.textContent = myCar.pos ? `#${myCar.pos}` : '—';
 
     const lapEl = $('hud-lap');
-    if (lapEl) lapEl.textContent = `${myCar.lap || 1}`;
-
-    const hpEl = $('hud-hp');
-    if (hpEl) {
-      const hp = Math.max(0, Math.round(myCar.hp || 0));
-      hpEl.textContent = `${hp}%`;
-      hpEl.style.color = hp < 30 ? 'var(--pink)' : hp < 60 ? 'var(--yellow)' : 'var(--cyan)';
+    if (lapEl) {
+      const totalLaps = Number(state.laps) || 3;
+      const completedLaps = Number(myCar.lap) || 0;
+      const currentLap = Math.min(totalLaps, completedLaps + (myCar.fin ? 0 : 1));
+      lapEl.textContent = `${currentLap}/${totalLaps}`;
     }
 
-    const ammoEl = $('hud-ammo');
-    if (ammoEl) ammoEl.textContent = myCar.ammo != null ? myCar.ammo : '—';
+    const ARCADE = Boolean(window.ROAD_RUMBLE_FLAGS && window.ROAD_RUMBLE_FLAGS.ARCADE_ITEMS !== false);
+    if (ARCADE) {
+      const powerEl = $('btn-power-name');
+      const powerButton = $('btn-power');
+      const iconEl = powerButton?.querySelector('.btn-icon');
+      const hudPower = $('hud-power-hud');
+      if (myCar.rolling) {
+        if (powerEl) powerEl.textContent = '🎲 ABRIENDO…';
+        if (iconEl) iconEl.textContent = '❔';
+        if (powerButton) powerButton.classList.remove('has-power');
+        if (hudPower) hudPower.textContent = '🎲';
+      } else if (myCar.power || myCar.item) {
+        const it = myCar.power || myCar.item;
+        const itNames = { turbo: 'TURBO', disco: 'DISCO', misil: 'MISIL', aceite: 'ACEITE', estrella: 'ESTRELLA', invencibilidad: 'ESTRELLA', tinta: 'TINTA' };
+        const itIcons = { turbo: '🔥', disco: '💿', misil: '🚀', aceite: '💧', estrella: '⭐', invencibilidad: '⭐', tinta: '🖌️' };
+        if (powerEl) powerEl.textContent = `¡${itNames[it] || it.toUpperCase()}! TOCAR`;
+        if (iconEl) iconEl.textContent = itIcons[it] || '⚡';
+        if (powerButton) powerButton.classList.add('has-power');
+        if (hudPower) hudPower.textContent = (itIcons[it] || '⚡') + ' ' + (itNames[it] || it);
+      } else {
+        if (powerEl) powerEl.textContent = 'PASAR CAJA';
+        if (iconEl) iconEl.textContent = '📦';
+        if (powerButton) powerButton.classList.remove('has-power');
+        if (hudPower) hudPower.textContent = '—';
+      }
+    } else {
+      const hpEl = $('hud-hp');
+      if (hpEl) {
+        const hp = Math.max(0, Math.round(myCar.hp || 0));
+        hpEl.textContent = `${hp}%`;
+        hpEl.style.color = hp < 30 ? 'var(--pink)' : hp < 60 ? 'var(--yellow)' : 'var(--cyan)';
+      }
+
+      const ammoEl = $('hud-ammo');
+      if (ammoEl) ammoEl.textContent = myCar.ammo != null ? myCar.ammo : '—';
+
+      const powerEl = $('btn-power-name');
+      const powerButton = $('btn-power');
+      if (powerEl) powerEl.textContent = myCar.power ? `ACTIVAR: ${myCar.power.toUpperCase()}` : 'VACÍO · E';
+      if (powerButton) powerButton.classList.toggle('has-power', Boolean(myCar.power));
+    }
   });
 
   socket.on(EV.BOOST_PAD_TRIGGERED, ({ seatToken }) => {
@@ -666,16 +763,63 @@ function initSocket() {
     }
   });
 
+  // Arcade Item Events with Haptic Feedback
+  socket.on(EV.ITEM_BOX_TAKEN, ({ seatToken, item }) => {
+    if (seatToken === S.seatToken) {
+      if (navigator.vibrate) navigator.vibrate([60, 40, 80]);
+      const itNames = { turbo: 'Turbo', disco: 'Disco rebotante', misil: 'Misil buscador', aceite: 'Mancha de aceite', estrella: 'Invencibilidad', invencibilidad: 'Invencibilidad', tinta: 'Tinta' };
+      toast(`📦 ¡Recibiste ${itNames[item] || item}!`, 'success', 2000);
+    }
+  });
+
+  socket.on(EV.ITEM_ROLLING, ({ seatToken }) => {
+    if (seatToken === S.seatToken) {
+      if (navigator.vibrate) navigator.vibrate([35]);
+    }
+  });
+
+  socket.on(EV.ITEM_USED, ({ seatToken, item }) => {
+    if (seatToken === S.seatToken) {
+      if (navigator.vibrate) navigator.vibrate([40, 30, 40]);
+    }
+  });
+
+  socket.on(EV.ITEM_HIT, ({ victim, item }) => {
+    if (victim === S.seatToken) {
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      toast(`💥 ¡Te golpearon con ${item}!`, 'error', 2500);
+    }
+  });
+
+  socket.on(EV.ITEM_BLOCKED, ({ seatToken }) => {
+    if (seatToken === S.seatToken) {
+      if (navigator.vibrate) navigator.vibrate([80, 80]);
+      toast('⭐ ¡Bloqueaste el ataque!', 'success', 2000);
+    }
+  });
+
   socket.on(EV.PICKUP_COLLECTED, ({ seatToken, type }) => {
     if (seatToken === S.seatToken) {
       if (navigator.vibrate) navigator.vibrate([90]);
-      let msg = '⚡ Objeto recogido';
-      if (type === 'repair') msg = '🔧 +35 HP Reparado';
-      else if (type === 'ammo') msg = '⚡ Munición Recargada';
-      else if (type === 'shield') msg = '🛡️ ¡Escudo Activado!';
-      else if (type === 'nitro') msg = '💥 ¡SUPER NITRO ACTIVADO!';
+      let msg = '⚡ Poder guardado · pulsa PODER / E';
+      if (type === 'star') msg += ' ★';
+      else if (type === 'banana') msg += ' 🍌';
+      else if (type === 'lightning') msg += ' ϟ';
+      else if (type === 'rocket') msg += ' ➤';
+      else if (type === 'frenzy') msg += ' ✦';
       toast(msg, 'success', 2200);
     }
+  });
+
+  window.addEventListener('keydown', (event) => {
+    if (event.key.toLowerCase() !== 'e' || event.repeat) return;
+    S.inputs.power = true;
+    sendInputNow();
+  });
+  window.addEventListener('keyup', (event) => {
+    if (event.key.toLowerCase() !== 'e') return;
+    S.inputs.power = false;
+    sendInputNow();
   });
 
   socket.on(EV.PLAYER_KICKED, ({ message }) => {
@@ -698,12 +842,27 @@ async function activateController() {
   showPhase('controller');
   setupTouchButtons();
 
+  const ARCADE = Boolean(window.ROAD_RUMBLE_FLAGS && window.ROAD_RUMBLE_FLAGS.ARCADE_ITEMS !== false);
+  if (ARCADE) {
+    const btnFire = $('btn-fire');
+    if (btnFire) btnFire.style.display = 'none';
+    const ammoCol = $('hud-ammo')?.parentElement;
+    if (ammoCol) ammoCol.style.display = 'none';
+    const hpCol = $('hud-hp')?.parentElement;
+    if (hpCol) hpCol.style.display = 'none';
+    const btnPower = $('btn-power');
+    if (btnPower) {
+      btnPower.style.flex = '2';
+      btnPower.style.minHeight = '80px';
+    }
+  }
+
   // Hide touch steer zone by default so player controls by tilting!
   const touchZone = $('touch-steer-zone');
   if (touchZone) touchZone.style.display = 'none';
 
   // Request gyro on activation
-  requestGyroPermission().catch(() => {});
+  requestGyroPermission();
 
   if (!_inputInterval) {
     _inputInterval = setInterval(() => {
@@ -788,6 +947,7 @@ function wireButtons() {
   $('btn-ctrl-weapon-prev')?.addEventListener('click', () => selectMobileWeapon(-1));
   $('btn-ctrl-weapon-next')?.addEventListener('click', () => selectMobileWeapon(1));
   $('btn-ctrl-ready')?.addEventListener('click', toggleMobileReady);
+  $('btn-ctrl-unlock')?.addEventListener('click', unlockMobileVehicle);
 
   // Invert & Calibrate & Sensitivity
   $('btn-calibrate')?.addEventListener('click', calibrate);

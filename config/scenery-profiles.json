@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "sourcePolicy": "Only OSM-derived geometry is rendered as real scenery. Unverified profile values are explicit and must not be presented as measured facts.",
+  "profiles": {
+    "mc-1929": {
+      "timeOfDay": { "value": "day", "verified": true, "basis": "race environment profile" },
+      "groundColor": "#8f969b",
+      "runoffColor": "#b7b0a2",
+      "typicalWeather": { "value": "sunny", "verified": false },
+      "landmarks": [
+        { "label": "harbor", "type": "water", "verified": true },
+        { "label": "grandstand", "type": "grandstand", "verified": true },
+        { "label": "urban buildings", "type": "building", "verified": true }
+      ]
+    },
+    "be-1925": {
+      "timeOfDay": { "value": "day", "verified": true, "basis": "race environment profile" },
+      "groundColor": "#4f6b3b",
+      "runoffColor": "#8a7658",
+      "typicalWeather": { "value": "rain possible", "verified": true, "basis": "regional climate" },
+      "landmarks": [
+        { "label": "forest", "type": "forest", "verified": true },
+        { "label": "grandstand", "type": "grandstand", "verified": true },
+        { "label": "paddock buildings", "type": "paddock", "verified": true }
+      ]
+    },
+    "sg-2008": {
+      "timeOfDay": { "value": "night", "verified": true, "basis": "night race" },
+      "groundColor": "#34383f",
+      "runoffColor": "#aa3347",
+      "typicalWeather": { "value": "hot and humid", "verified": true, "basis": "regional climate" },
+      "landmarks": [
+        { "label": "marina water", "type": "water", "verified": true },
+        { "label": "urban buildings", "type": "building", "verified": true },
+        { "label": "grandstand", "type": "grandstand", "verified": true }
+      ]
+    }
+  }
+}

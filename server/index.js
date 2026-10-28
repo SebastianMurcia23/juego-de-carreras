@@ -148,9 +148,13 @@ io.on('connection', (socket) => {
       } else {
         // Confirm to the mobile
         socket.emit(EV.SEAT_LINKED, {
-          success: true,
-          name:    result.name,
-          isHost:  result.isHost,
+          success:   true,
+          name:      result.name,
+          isHost:    result.isHost,
+          carId:     result.carId,
+          weaponId:  result.weaponId,
+          isReady:   result.isReady,
+          roomState: result.roomState,
         });
         console.log(`[seat] Mobile ${id} linked as "${result.name}" in ${result.roomCode}`);
       }
@@ -271,6 +275,19 @@ io.on('connection', (socket) => {
       }
     } catch (e) {
       console.error('[start_game]', e);
+    }
+  });
+
+  /* ── Stage 2: Host skip intermission to next race ────────────────────── */
+  socket.on(EV.NEXT_RACE, ({ roomCode, hostToken } = {}) => {
+    try {
+      const upper = (roomCode || '').toUpperCase();
+      const res = rooms.advanceChampionship(upper, hostToken);
+      if (res && res.error && res.error !== 'UNAUTHORIZED') {
+        socket.emit(EV.ERROR, { message: 'No se pudo avanzar a la siguiente pista.' });
+      }
+    } catch (e) {
+      console.error('[next_race]', e);
     }
   });
 

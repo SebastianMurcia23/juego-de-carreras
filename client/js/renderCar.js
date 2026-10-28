@@ -19,149 +19,89 @@ const CAR_RENDERER = (() => {
    */
   function drawCar(ctx, cx, cy, car, weapon, heading = 0, scale = 1.0) {
     if (!car) return;
+    const ARCADE = (typeof window !== 'undefined' && window.ROAD_RUMBLE_FLAGS && window.ROAD_RUMBLE_FLAGS.ARCADE_ITEMS !== false);
+    if (ARCADE) weapon = null;
 
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(heading);
     ctx.scale(scale, scale);
 
-    const w = (car.dimensions?.length || 64) * 0.5; // Half length along X
-    const h = (car.dimensions?.width || 36) * 0.5;  // Half width along Y
+    drawFormulaCar(ctx, car, weapon);
+    ctx.restore();
+    return;
+  }
+
+  function drawFormulaCar(ctx, car, weapon) {
+    const length = car.dimensions?.length || 64;
+    const width = car.dimensions?.width || 36;
+    const unit = length / 65;
     const primary = car.color || '#00f5d4';
     const accent = car.accentColor || '#ffffff';
+    const rearScale = car.id === 'goliath_mk4' || car.id === 'titan_roller' || car.id === 'iron_boar' ? 1.15 : 1;
+    const frontWingScale = car.id === 'apex_venom' || car.id === 'cyber_storm' ? 1.12 : 1;
+    const tireScale = car.id === 'mud_crusher' || car.id === 'dune_raider' ? 1.25 : rearScale;
+    const halfLength = length / 2;
+    const halfWidth = width / 2;
 
-    // 1. Soft ground shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.42)';
     ctx.beginPath();
-    ctx.ellipse(0, 4, w + 4, h + 3, 0, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.ellipse(-2 * unit, 4 * unit, halfLength * 0.9, halfWidth * 0.8, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // 2. Wheels (4 tires with rims)
-    const tireW = 14;
-    const tireH = 7;
-    const wheelPositions = [
-      { x: w * 0.65, y: -h * 0.95 },  // Front right
-      { x: w * 0.65, y: h * 0.95 },   // Front left
-      { x: -w * 0.65, y: -h * 0.95 }, // Rear right
-      { x: -w * 0.65, y: h * 0.95 },  // Rear left
-    ];
-
-    wheelPositions.forEach(pos => {
-      ctx.save();
-      ctx.translate(pos.x, pos.y);
-      // Tire rubber
+    const tireWidth = Math.max(3, width * 0.13);
+    const frontTireLength = Math.max(7, width * 0.2);
+    const rearTireLength = frontTireLength * tireScale;
+    const frontX = halfLength * 0.48;
+    const rearX = -halfLength * 0.46;
+    for (const wheel of [
+      { x: frontX, y: -halfWidth * 0.96, length: frontTireLength },
+      { x: frontX, y: halfWidth * 0.96, length: frontTireLength },
+      { x: rearX, y: -halfWidth * 1.02, length: rearTireLength },
+      { x: rearX, y: halfWidth * 1.02, length: rearTireLength },
+    ]) {
       ctx.fillStyle = '#111317';
-      ctx.beginPath();
-      ctx.roundRect(-tireW / 2, -tireH / 2, tireW, tireH, 2.5);
-      ctx.fill();
-      // Neon rim accent
-      ctx.strokeStyle = primary;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.restore();
-    });
-
-    // 3. Body base shape
-    ctx.beginPath();
-    switch (car.shape) {
-      case 'heavy_tank':
-      case 'combat_truck':
-        // Boxy armored chassis
-        ctx.moveTo(-w * 0.9, -h * 0.85);
-        ctx.lineTo(w * 0.7, -h * 0.9);
-        ctx.lineTo(w * 0.95, -h * 0.6);
-        ctx.lineTo(w * 0.95, h * 0.6);
-        ctx.lineTo(w * 0.7, h * 0.9);
-        ctx.lineTo(-w * 0.9, h * 0.85);
-        ctx.closePath();
-        break;
-
-      case 'compact_hatch':
-      case 'dune_buggy':
-        // Agile, tapered front
-        ctx.moveTo(-w * 0.85, -h * 0.8);
-        ctx.lineTo(w * 0.5, -h * 0.8);
-        ctx.lineTo(w * 0.95, -h * 0.45);
-        ctx.lineTo(w * 0.95, h * 0.45);
-        ctx.lineTo(w * 0.5, h * 0.8);
-        ctx.lineTo(-w * 0.85, h * 0.8);
-        ctx.closePath();
-        break;
-
-      case 'sleek_supercar':
-      case 'aero_prototype':
-      default:
-        // Aerodynamic arrow chassis
-        ctx.moveTo(-w * 0.85, -h * 0.75);
-        ctx.lineTo(w * 0.2, -h * 0.85);
-        ctx.lineTo(w * 0.85, -h * 0.5);
-        ctx.lineTo(w * 0.98, 0);
-        ctx.lineTo(w * 0.85, h * 0.5);
-        ctx.lineTo(w * 0.2, h * 0.85);
-        ctx.lineTo(-w * 0.85, h * 0.75);
-        ctx.closePath();
-        break;
+      ctx.fillRect(wheel.x - wheel.length / 2, wheel.y - tireWidth / 2, wheel.length, tireWidth);
+      ctx.strokeStyle = '#737b84';
+      ctx.lineWidth = Math.max(1, unit);
+      ctx.strokeRect(wheel.x - wheel.length / 2, wheel.y - tireWidth / 2, wheel.length, tireWidth);
     }
 
-    // Body gradient fill
-    const grad = ctx.createLinearGradient(-w, 0, w, 0);
-    grad.addColorStop(0, primary);
-    grad.addColorStop(0.65, primary);
-    grad.addColorStop(1, accent);
-    ctx.fillStyle = grad;
-    ctx.fill();
+    ctx.fillStyle = '#1a1d22';
+    ctx.fillRect(-halfLength * 0.63, -halfWidth * 0.82, halfLength * 1.32, halfWidth * 1.64);
 
-    // Body border with subtle glow
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    // 4. Cockpit / Windshield
+    ctx.fillStyle = primary;
     ctx.beginPath();
-    ctx.moveTo(-w * 0.15, -h * 0.5);
-    ctx.lineTo(w * 0.35, -h * 0.4);
-    ctx.lineTo(w * 0.35, h * 0.4);
-    ctx.lineTo(-w * 0.15, h * 0.5);
+    ctx.moveTo(-halfLength * 0.62, -halfWidth * 0.62);
+    ctx.lineTo(halfLength * 0.48, -halfWidth * 0.38);
+    ctx.lineTo(halfLength * 0.82, 0);
+    ctx.lineTo(halfLength * 0.48, halfWidth * 0.38);
+    ctx.lineTo(-halfLength * 0.62, halfWidth * 0.62);
     ctx.closePath();
-    ctx.fillStyle = '#0a0d14';
     ctx.fill();
-    ctx.strokeStyle = 'rgba(0, 245, 212, 0.5)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
 
-    // Windshield reflection
+    ctx.fillStyle = '#10131a';
     ctx.beginPath();
-    ctx.moveTo(w * 0.1, -h * 0.3);
-    ctx.lineTo(w * 0.28, -h * 0.25);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-
-    // 5. Rear Spoiler / Wing
-    ctx.save();
-    ctx.fillStyle = '#111317';
-    ctx.strokeStyle = primary;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.roundRect(-w * 0.95, -h * 0.9, 6, h * 1.8, 2);
+    ctx.moveTo(-halfLength * 0.14, -halfWidth * 0.34);
+    ctx.lineTo(halfLength * 0.22, -halfWidth * 0.25);
+    ctx.lineTo(halfLength * 0.22, halfWidth * 0.25);
+    ctx.lineTo(-halfLength * 0.14, halfWidth * 0.34);
+    ctx.closePath();
     ctx.fill();
-    ctx.stroke();
-    ctx.restore();
 
-    // 6. Front Headlights (Neon glows)
-    ctx.fillStyle = '#ffffff';
-    ctx.shadowColor = '#00f5d4';
-    ctx.shadowBlur = 8;
-    ctx.fillRect(w * 0.82, -h * 0.5, 4, 3);
-    ctx.fillRect(w * 0.82, h * 0.5 - 3, 4, 3);
-    ctx.shadowBlur = 0; // Reset shadow
+    ctx.fillStyle = accent;
+    ctx.fillRect(-halfLength * 0.35, -Math.max(1, width * 0.025), halfLength * 0.72, Math.max(2, width * 0.05));
 
-    // 7. Mounted Weapon
-    if (weapon) {
-      drawMountedWeapon(ctx, 0, 0, weapon, primary);
-    }
+    ctx.fillStyle = '#1a1d22';
+    ctx.fillRect(-halfLength * 0.86, -halfWidth * 1.12, width * 0.09, halfWidth * 2.24);
+    ctx.fillRect(halfLength * 0.76, -halfWidth * 1.2, width * 0.08 * frontWingScale, halfWidth * 2.4 * frontWingScale);
 
-    ctx.restore();
+    ctx.fillStyle = '#f7f7f7';
+    ctx.beginPath();
+    ctx.arc(halfLength * 0.05, 0, Math.max(1.5, width * 0.06), 0, Math.PI * 2);
+    ctx.fill();
+
+    if (weapon) drawMountedWeapon(ctx, 0, 0, weapon, primary);
   }
 
   /**

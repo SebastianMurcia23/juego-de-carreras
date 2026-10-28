@@ -1,0 +1,692 @@
+{
+  "source": "tools\\verify-tracks.js",
+  "tracks": 40,
+  "passed": 40,
+  "failed": 0,
+  "warningCount": 40,
+  "maxCheckpoints": 115,
+  "currentTickSegmentChecks": 1380,
+  "legacyMaxCheckpoints": 120,
+  "results": [
+    {
+      "id": "ae-2009",
+      "checkpoints": 115,
+      "closureGap": 91.36,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 18.8 < 74.8"
+      ]
+    },
+    {
+      "id": "ar-1952",
+      "checkpoints": 115,
+      "closureGap": 91.36,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 40.7 < 74.8"
+      ]
+    },
+    {
+      "id": "at-1969",
+      "checkpoints": 115,
+      "closureGap": 91.36,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 20.8 < 74.8"
+      ]
+    },
+    {
+      "id": "au-1953",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 59.99,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 12.0 < 74.8"
+      ]
+    },
+    {
+      "id": "az-2016",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 24.3 < 74.8"
+      ]
+    },
+    {
+      "id": "be-1925",
+      "checkpoints": 115,
+      "closureGap": 91.36,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 17.3 < 74.8"
+      ]
+    },
+    {
+      "id": "bh-2002",
+      "checkpoints": 115,
+      "closureGap": 91.36,
+      "maxStartDistance": 59.95,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 17.4 < 74.8"
+      ]
+    },
+    {
+      "id": "br-1940",
+      "checkpoints": 115,
+      "closureGap": 91.36,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 24.5 < 74.8"
+      ]
+    },
+    {
+      "id": "br-1977",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 49.3 < 74.8"
+      ]
+    },
+    {
+      "id": "ca-1978",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 30.6 < 74.8"
+      ]
+    },
+    {
+      "id": "cn-2004",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 22.2 < 74.8"
+      ]
+    },
+    {
+      "id": "de-1927",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 15.3 < 74.8"
+      ]
+    },
+    {
+      "id": "de-1932",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 24.5 < 74.8"
+      ]
+    },
+    {
+      "id": "es-1991",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 50.9 < 74.8"
+      ]
+    },
+    {
+      "id": "es-2026",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 17.7 < 74.8"
+      ]
+    },
+    {
+      "id": "fr-1960",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 23.1 < 74.8"
+      ]
+    },
+    {
+      "id": "fr-1969",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 20.4 < 74.8"
+      ]
+    },
+    {
+      "id": "gb-1948",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 30.6 < 74.8"
+      ]
+    },
+    {
+      "id": "hu-1986",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 28.3 < 74.8"
+      ]
+    },
+    {
+      "id": "it-1914",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 60.7 < 74.8"
+      ]
+    },
+    {
+      "id": "it-1922",
+      "checkpoints": 115,
+      "closureGap": 91.36,
+      "maxStartDistance": 59.96,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 17.7 < 74.8"
+      ]
+    },
+    {
+      "id": "it-1953",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 59.9,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 24.0 < 74.8"
+      ]
+    },
+    {
+      "id": "jp-1962",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "autointersección o cruce detectado"
+      ]
+    },
+    {
+      "id": "mc-1929",
+      "checkpoints": 115,
+      "closureGap": 89.63,
+      "maxStartDistance": 43.15,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 23.4 < 74.8"
+      ]
+    },
+    {
+      "id": "mx-1962",
+      "checkpoints": 115,
+      "closureGap": 91.36,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 19.7 < 74.8"
+      ]
+    },
+    {
+      "id": "my-1999",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 28.3 < 74.8"
+      ]
+    },
+    {
+      "id": "nl-1948",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 37.6 < 74.8"
+      ]
+    },
+    {
+      "id": "pt-1972",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 45.4 < 74.8"
+      ]
+    },
+    {
+      "id": "pt-2008",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 31.8 < 74.8"
+      ]
+    },
+    {
+      "id": "qa-2004",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 44.6 < 74.8"
+      ]
+    },
+    {
+      "id": "ru-2014",
+      "checkpoints": 115,
+      "closureGap": 91.36,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 19.9 < 74.8"
+      ]
+    },
+    {
+      "id": "sa-2021",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 22.7 < 74.8"
+      ]
+    },
+    {
+      "id": "sg-2008",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 21.6 < 74.8"
+      ]
+    },
+    {
+      "id": "tr-2005",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 59.98,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 30.8 < 74.8"
+      ]
+    },
+    {
+      "id": "us-1909",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 34.8 < 74.8"
+      ]
+    },
+    {
+      "id": "us-1956",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 59.9 < 74.8"
+      ]
+    },
+    {
+      "id": "us-2012",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 12.6 < 74.8"
+      ]
+    },
+    {
+      "id": "us-2022",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 19.0 < 74.8"
+      ]
+    },
+    {
+      "id": "us-2023",
+      "checkpoints": 115,
+      "closureGap": 91.37,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 21.5 < 74.8"
+      ]
+    },
+    {
+      "id": "za-1961",
+      "checkpoints": 115,
+      "closureGap": 91.36,
+      "maxStartDistance": 60,
+      "startsBehind": true,
+      "boundsValid": true,
+      "scenery": {
+        "enabled": false,
+        "features": 0,
+        "errors": []
+      },
+      "errors": [],
+      "warnings": [
+        "radio mínimo 38.7 < 74.8"
+      ]
+    }
+  ]
+}

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Road Rumble – Control</title>
-  <meta name="description" content="Control de volante y armas para Road Rumble." />
+  <meta name="description" content="Control de volante y poderes para Road Rumble. Gira el celular para dirigir." />
   <link rel="stylesheet" href="/css/style.css" />
   <style>
     html, body {
@@ -141,27 +141,24 @@
       </div>
     </div>
 
-    <!-- Weapon selection card -->
-    <div class="glass ctrl-car-card" style="padding:12px 16px;">
-      <span style="font-size:0.65rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; display:block; margin-bottom:4px;">ARMA SELECCIONADA</span>
-      <div class="flex-row items-center justify-between" style="justify-content:space-between;">
-        <button id="btn-ctrl-weapon-prev" class="btn btn-secondary btn-sm">◀</button>
-        <div class="flex-row items-center gap-8">
-          <span id="ctrl-weapon-icon" style="font-size:1.4rem;">⚡</span>
-          <div class="flex-col" style="text-align:left;">
-            <span id="ctrl-weapon-name" class="font-racing" style="font-size:0.85rem; font-weight:700; color:var(--text);">Vulcan MG</span>
-            <span id="ctrl-weapon-ammo" style="font-size:0.65rem; color:var(--cyan);">100 Balas</span>
-          </div>
-        </div>
-        <button id="btn-ctrl-weapon-next" class="btn btn-secondary btn-sm">▶</button>
-      </div>
+    <!-- Power info card (arcade: no weapon selection) -->
+    <div class="glass ctrl-car-card" style="padding:12px 16px; text-align:center;">
+      <span style="font-size:0.65rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; display:block; margin-bottom:6px;">PODERES</span>
+      <span style="font-size:0.82rem; color:var(--cyan); line-height:1.4;">Recoge cajas arcoíris en la pista<br>para obtener poderes. Usa el botón <strong>PODER</strong>.</span>
     </div>
+
 
     <!-- Ready & Go to Controller Buttons -->
     <div class="flex-col gap-8 w-full items-center">
-      <button id="btn-ctrl-ready" class="btn-ready ctrl-btn-ready">
-        LISTO PARA CORRER
+      <button id="btn-ctrl-ready" class="btn-ready ctrl-btn-ready" style="width:100%;">
+        🏎️ Confirmar Vehículo
       </button>
+      <button id="btn-ctrl-unlock" class="btn btn-secondary w-full hidden" style="padding:10px; font-size:0.85rem; border-color:var(--text-muted); color:var(--text-muted);">
+        ✏️ Cambiar vehículo
+      </button>
+      <div id="ctrl-confirmed-badge" class="badge-ready hidden" style="font-size:0.85rem; padding:8px 16px; width:100%; text-align:center;">
+        ✓ Vehículo confirmado · Esperando inicio
+      </div>
       <button id="btn-back-to-ctrl" class="btn btn-secondary w-full" style="padding:14px; font-weight:700; border-color:var(--cyan); color:var(--cyan);">
         🎮 Ir al Volante / Control
       </button>
@@ -211,20 +208,12 @@
 
     <div class="flex-row items-center gap-12">
       <div style="text-align:center;">
-        <div class="text-muted" style="font-size:0.6rem;">VTA</div>
+        <div class="text-muted" style="font-size:0.6rem;">VUELTA</div>
         <div id="hud-lap" class="hud-value">—</div>
       </div>
       <div style="text-align:center;">
-        <div class="text-muted" style="font-size:0.6rem;">HP</div>
-        <div id="hud-hp" class="hud-value text-cyan">100%</div>
-      </div>
-      <div style="text-align:center;">
-        <div class="text-muted" style="font-size:0.6rem;">BALAS</div>
-        <div id="hud-ammo" class="hud-value text-yellow">—</div>
-      </div>
-      <div style="text-align:center;">
-        <div class="text-muted" style="font-size:0.6rem;">TURBO</div>
-        <div id="hud-turbo" class="hud-value text-pink">100%</div>
+        <div class="text-muted" style="font-size:0.6rem;">PODER</div>
+        <div id="hud-power-hud" class="hud-value text-cyan">—</div>
       </div>
     </div>
   </div>
@@ -284,6 +273,9 @@
       <div id="sensor-diag" style="font-size:0.55rem; color:#888; font-family:monospace; margin-top:2px;">
         📡 SENSOR: INICIANDO…
       </div>
+      <p style="font-size:0.55rem; color:var(--text-muted); text-align:center; margin-top:4px; line-height:1.4;">
+        Si el volante está girado, toca <strong style="color:var(--cyan)">⧖ Calibrar</strong> con el teléfono recto.
+      </p>
 
       <!-- Quick utility controls -->
       <div class="ctrl-util-bar">
@@ -303,12 +295,18 @@
 
     </div>
 
-    <!-- RIGHT WING: Ergonomic Right Thumb Buttons (DISPARAR & ACELERAR) -->
+    <!-- RIGHT WING: Right Thumb Buttons (PODER & ACELERAR – arcade: no DISPARAR) -->
     <div class="cockpit-wing wing-right">
-      <button id="btn-fire" class="ctrl-btn btn-fire" type="button">
+      <button id="btn-fire" class="ctrl-btn btn-fire" type="button" style="display:none;">
         <span class="btn-icon">🎯</span>
         <span class="btn-title">DISPARAR</span>
         <span id="btn-fire-weapon" class="btn-sub">ARMA</span>
+      </button>
+
+      <button id="btn-power" class="ctrl-btn btn-power" type="button">
+        <span class="btn-icon">❔</span>
+        <span class="btn-title">PODER</span>
+        <span id="btn-power-name" class="btn-sub">PASAR CAJA</span>
       </button>
 
       <button id="btn-accel" class="ctrl-btn btn-accel" type="button">
@@ -338,10 +336,13 @@
 
 <!-- ─── Scripts ──────────────────────────────────────────────────────────── -->
 <script src="/shared/constants.js?v=8"></script>
+<script src="/config/feature-flags.js"></script>
+<script src="/config/cars.legacy.js"></script>
+<script src="/config/cars.f1.js"></script>
 <script src="/config/cars.js"></script>
 <script src="/config/weapons.js"></script>
 <script src="/js/renderCar.js"></script>
 <script src="/socket.io/socket.io.js"></script>
-<script src="/js/controller.js?v=10"></script>
+<script src="/js/controller.js?v=12"></script>
 </body>
 </html>

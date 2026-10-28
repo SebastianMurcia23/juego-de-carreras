@@ -9,11 +9,27 @@
 const SHARED       = require('../shared/constants');
 const CARS_CONFIG  = require('../config/cars');
 const WEAPONS_CFG  = require('../config/weapons');
+const TRACKS_CONFIG = require('../config/tracks');
 const SCORING      = require('../config/scoring');
+const FLAGS        = require('../config/feature-flags');
+const ItemSystem   = require('./ItemSystem');
 const { generateTrack } = require('./TrackGenerator');
 
 const EV  = SHARED.EVENTS;
 const PHY = SHARED.PHYSICS;
+const ARCADE = Boolean(FLAGS.ARCADE_ITEMS);
+
+function pointToSegmentDistance(px, py, ax, ay, bx, by) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lengthSquared = dx * dx + dy * dy;
+  const projection = lengthSquared > 0
+    ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lengthSquared))
+    : 0;
+  const closestX = ax + projection * dx;
+  const closestY = ay + projection * dy;
+  return Math.hypot(px - closestX, py - closestY);
+}
 
 class GameRoom {
   /**
@@ -38,11 +54,12 @@ class GameRoom {
     this.cars = new Map(); // seatToken → carState
     this.projectiles = []; // active projectiles
     this.mines       = []; // deployed mines
-    this.pickups     = (this.track.pickups || []).map(p => ({
+    this.pickups     = ARCADE ? [] : (this.track.pickups || []).map(p => ({
       ...p,
       active: true,
       respawnTick: 0,
     }));
+    this.itemSystem  = null; // initialized after cars are populated (ARCADE mode)
 
     let idx = 0;
     for (const [seatToken, seat] of roomData.seats) {
@@ -62,6 +79,8 @@ class GameRoom {
         // Position & motion
         x:             startPos.x,
         y:             startPos.y,
+        previousX:     startPos.x,
+        previousY:     startPos.y,
         angle:         startPos.angle,
         vx:            0,
         vy:            0,
@@ -71,7 +90,9 @@ class GameRoom {
         steerSeq:      -1,
 
         // Stats (from config, normalized to physics scale)
-        maxSpeed:      (carConfig.stats.maxSpeed / 100) * 450,   // px/s
+        // Keep the catalog ratings proportional while applying the shared
+        // pace multiplier to every vehicle class.
+        maxSpeed:      (carConfig.stats.maxSpeed / 100) * 450 * PHY.CAR_SPEED_MULTIPLIER, // px/s
         accelMult:     carConfig.stats.acceleration / 100,
         handlingMult:  carConfig.stats.handling / 100,
         driftMult:     carConfig.stats.drift / 100,
@@ -99,6 +120,9 @@ class GameRoom {
         invulnUntil:   0,
         shieldUntil:   0,
         boostUntil:    0,
+        powerInvulnUntil: 0,
+        slowUntil: 0,
+        frenzyUntil: 0,
         lastBoostPadTick: 0,
 
         // Race progress
@@ -110,6 +134,16 @@ class GameRoom {
         kills:         0,
         deaths:        0,
         specialBoxes:  0,
+        storedPower: null,
+
+        // ARCADE_ITEMS state
+        arcadeItem:      null,   // stored item
+        arcadeRollEnd:   0,      // tick when roulette finishes
+        arcadeStunEnd:   0,      // tick when stun ends
+        arcadeBoostEnd:  0,      // tick when boost ends
+        arcadeInvEnd:    0,      // tick when invincibility ends
+        arcadeInkEnd:    0,      // tick when ink effect ends
+        arcadeItemHitBonus: 0,   // hits landed this race
 
         // Input (from controller)
         input: {
@@ -118,6 +152,7 @@ class GameRoom {
           brake: false,
           fire:  false,
           drift: false,
+          power: false,
         },
 
         // Drift state
@@ -132,6 +167,22 @@ class GameRoom {
     this.raceStartTick = 0;
     this.finishOrder = [];
     this.startTime   = Date.now();
+    this.tickCount   = 0;
+    this.elapsedTime = 0;
+    this.firstFinishedTick = null;
+    this.firstFinishedTime = null;
+    this.firstFinishedWallTime = null;
+
+    // Initialize arcade item system after cars are set up
+    if (ARCADE) {
+      const totalCars = this.cars.size;
+      const distMode  = (this.settings && this.settings.itemDistribution) || null;
+      this.itemSystem = new ItemSystem(
+        this.io, this.roomCode, this.cars, this.track, PHY.TICK_RATE_HZ,
+        distMode, totalCars
+      );
+      this.itemSystem.initBoxes(CARS_CONFIG);
+    }
   }
 
   /* ── Start the race countdown then racing loop ────────────────────────── */
@@ -165,6 +216,9 @@ class GameRoom {
       clearInterval(this.interval);
       this.interval = null;
     }
+    if (this.itemSystem) {
+      this.itemSystem.clear();
+    }
     this.state = 'finished';
   }
 
@@ -173,7 +227,7 @@ class GameRoom {
     const car = this.cars.get(seatToken);
     if (!car) return;
     const hasSteerSequence = Number.isFinite(inputs.steerSeq);
-    if (!hasSteerSequence || inputs.steerSeq !== car.steerSeq) {
+    if (!hasSteerSequence || inputs.steerSeq > car.steerSeq) {
       car.input.steer = Math.max(-1, Math.min(1, Number(inputs.steer) || 0));
       if (hasSteerSequence) car.steerSeq = inputs.steerSeq;
     }
@@ -181,6 +235,15 @@ class GameRoom {
     car.input.brake = Boolean(inputs.brake);
     car.input.fire  = Boolean(inputs.fire);
     car.input.drift = Boolean(inputs.drift);
+    const activatePower = Boolean(inputs.power);
+    if (activatePower && !car.input.power) {
+      if (ARCADE && this.itemSystem) {
+        this.itemSystem.activateItem(car);
+      } else {
+        this._activateStoredPower(car);
+      }
+    }
+    car.input.power = activatePower;
   }
 
   setSteer(seatToken, steer, steerSeq) {
@@ -195,14 +258,23 @@ class GameRoom {
   /* ── Main simulation tick ─────────────────────────────────────────────── */
   tick(dt) {
     this.tickCount++;
+    this.elapsedTime += dt;
+    if (ARCADE && this.itemSystem) this.itemSystem.tickCount = this.tickCount;
 
     if (this.state === 'racing') {
-      // Update pickups respawn
-      for (let i = 0; i < this.pickups.length; i++) {
-        const pk = this.pickups[i];
-        if (!pk.active && this.tickCount >= pk.respawnTick) {
-          pk.active = true;
+      if (!ARCADE) {
+        // Classic: Update pickups respawn
+        for (let i = 0; i < this.pickups.length; i++) {
+          const pk = this.pickups[i];
+          if (!pk.active && this.tickCount >= pk.respawnTick) {
+            pk.active = true;
+          }
         }
+      }
+
+      // Tick arcade item system (projectiles, oils, box respawn)
+      if (ARCADE && this.itemSystem) {
+        this.itemSystem.tick(dt);
       }
 
       // Update each car
@@ -214,13 +286,19 @@ class GameRoom {
           }
           continue;
         }
+        car.previousX = car.x;
+        car.previousY = car.y;
         this._updateCar(car, dt);
         this._checkCheckpoints(car);
-        this._handleFiring(car);
+        if (!ARCADE) this._handleFiring(car);
+        // Arcade: try box collection
+        if (ARCADE && this.itemSystem) this.itemSystem.tryCollectBox(car);
       }
 
-      // Update projectiles
-      this._updateProjectiles(dt);
+      if (!ARCADE) {
+        // Update classic projectiles
+        this._updateProjectiles(dt);
+      }
 
       // Car-car collisions
       this._carCollisions();
@@ -235,6 +313,14 @@ class GameRoom {
 
   /* ── Car physics update ───────────────────────────────────────────────── */
   _updateCar(car, dt) {
+    // Apply arcade item modifiers
+    let arcadeSpeedMult = 1.0;
+    let arcadeStunned   = false;
+    if (ARCADE && this.itemSystem) {
+      const mod = this.itemSystem.getCarModifiers(car);
+      arcadeSpeedMult = mod.speedMult;
+      arcadeStunned   = mod.stunned;
+    }
     const input = car.input;
 
     // Get terrain at car position
@@ -244,11 +330,15 @@ class GameRoom {
     const grip = terrainGrip * tractionBonus;
 
     // ── 1. Acceleration / Braking force ──
-    const isBoosting = this.tickCount < car.boostUntil;
+    const isBoosting = ARCADE
+      ? (this.itemSystem && this.itemSystem.isBoostActive(car))
+      : (this.tickCount < car.boostUntil);
     const autoThrottle = input.accel;
     let accelForce = 0;
+    const isSlowed = this.tickCount < car.slowUntil;
     if (autoThrottle) {
-      accelForce = PHY.ACCEL_FORCE * car.accelMult * grip * (isBoosting ? 1.4 : 1.0);
+      accelForce = PHY.ACCEL_FORCE * car.accelMult * grip *
+        (isBoosting ? 1.4 : 1.0) * (isSlowed ? PHY.POWERUP_EMP_FACTOR : 1);
     }
     if (input.brake) {
       if (car.speed > 10) {
@@ -351,7 +441,15 @@ class GameRoom {
 
     // ── Speed cap ──
     car.speed = Math.sqrt(car.vx * car.vx + car.vy * car.vy);
-    const effectiveMaxSpeed = isBoosting ? car.maxSpeed * 1.45 : car.maxSpeed;
+    let effectiveMaxSpeed;
+    if (ARCADE) {
+      effectiveMaxSpeed = car.maxSpeed * arcadeSpeedMult;
+    } else {
+      effectiveMaxSpeed = (isBoosting ? car.maxSpeed * 1.45 : car.maxSpeed) *
+        (isSlowed ? PHY.POWERUP_EMP_FACTOR : 1);
+    }
+    // Validate against NaN
+    if (!Number.isFinite(effectiveMaxSpeed) || effectiveMaxSpeed <= 0) effectiveMaxSpeed = car.maxSpeed;
     if (car.speed > effectiveMaxSpeed) {
       const scale = effectiveMaxSpeed / car.speed;
       car.vx *= scale;
@@ -385,19 +483,23 @@ class GameRoom {
       }
     }
 
-    // ── Pickups collision ──
-    if (this.pickups) {
+    // ── Pickups collision (classic mode only; arcade uses itemSystem.tryCollectBox) ──
+    if (!ARCADE && this.pickups) {
       for (let i = 0; i < this.pickups.length; i++) {
         const pk = this.pickups[i];
         if (!pk.active) continue;
         const dx = car.x - pk.x;
         const dy = car.y - pk.y;
+        if (car.storedPower) continue;
         if (Math.sqrt(dx * dx + dy * dy) < PHY.PICKUP_RADIUS + PHY.CAR_RADIUS) {
           pk.active = false;
           pk.respawnTick = this.tickCount + Math.floor(PHY.PICKUP_RESPAWN_MS / 1000 * PHY.TICK_RATE_HZ);
-          this._applyPickupEffect(car, pk.type);
+          const powerType = pk.type === 'item_box' ? this._rollPowerup() : pk.type;
+          car.storedPower = powerType;
+          car.specialBoxes++;
           this.io.to(this.roomCode).emit(EV.PICKUP_COLLECTED, {
-            type:      pk.type,
+            type:      powerType,
+            stored:    true,
             name:      car.name,
             seatToken: car.seatToken,
             x:         pk.x,
@@ -410,6 +512,8 @@ class GameRoom {
   }
 
   _applyPickupEffect(car, type) {
+    let effectX = car.x;
+    let effectY = car.y;
     switch (type) {
       case 'repair':
         car.health = Math.min(PHY.MAX_HEALTH, car.health + PHY.REPAIR_AMOUNT);
@@ -425,7 +529,106 @@ class GameRoom {
         car.vx += Math.cos(car.angle) * (PHY.BOOST_PAD_FORCE * 1.3);
         car.vy += Math.sin(car.angle) * (PHY.BOOST_PAD_FORCE * 1.3);
         break;
+      case 'star':
+        car.powerInvulnUntil = this.tickCount +
+          Math.floor(PHY.POWERUP_STAR_MS / 1000 * PHY.TICK_RATE_HZ);
+        car.boostUntil = Math.max(car.boostUntil,
+          this.tickCount + Math.floor(PHY.POWERUP_STAR_MS / 1000 * PHY.TICK_RATE_HZ));
+        break;
+      case 'emp':
+        for (const [, rival] of this.cars) {
+          if (rival !== car && rival.alive) {
+            rival.slowUntil = this.tickCount +
+              Math.floor(PHY.POWERUP_EMP_MS / 1000 * PHY.TICK_RATE_HZ);
+          }
+        }
+        break;
+      case 'bomb':
+        for (const [, rival] of this.cars) {
+          if (rival === car || !rival.alive) continue;
+          const dx = rival.x - car.x;
+          const dy = rival.y - car.y;
+          if (Math.hypot(dx, dy) <= PHY.POWERUP_BOMB_RADIUS &&
+              this.tickCount >= rival.powerInvulnUntil) {
+            rival.health -= PHY.POWERUP_BOMB_DAMAGE * (1 - rival.armorMult * 0.35);
+            rival.vx += dx / Math.max(1, Math.hypot(dx, dy)) * 90;
+            rival.vy += dy / Math.max(1, Math.hypot(dx, dy)) * 90;
+            if (rival.health <= 0) this._eliminateCar(rival, car.seatToken);
+          }
+        }
+        break;
+      case 'banana':
+        this.mines.push({
+          x: car.x - Math.cos(car.angle) * 34,
+          y: car.y - Math.sin(car.angle) * 34,
+          owner: car.seatToken,
+          damage: PHY.POWERUP_BANANA_DAMAGE,
+          radius: 34,
+          armTick: this.tickCount + Math.floor(PHY.TICK_RATE_HZ * 0.25),
+          color: '#f4d35e',
+          kind: 'banana',
+          alive: true,
+        });
+        effectX = car.x - Math.cos(car.angle) * 34;
+        effectY = car.y - Math.sin(car.angle) * 34;
+        break;
+      case 'lightning':
+        for (const [, rival] of this.cars) {
+          if (rival === car || !rival.alive) continue;
+          const dx = rival.x - car.x;
+          const dy = rival.y - car.y;
+          if (Math.hypot(dx, dy) <= PHY.POWERUP_LIGHTNING_RADIUS &&
+              this.tickCount >= rival.powerInvulnUntil) {
+            rival.health -= PHY.POWERUP_LIGHTNING_DAMAGE * (1 - rival.armorMult * 0.3);
+            rival.slowUntil = Math.max(rival.slowUntil,
+              this.tickCount + Math.floor(PHY.POWERUP_LIGHTNING_MS / 1000 * PHY.TICK_RATE_HZ));
+            if (rival.health <= 0) this._eliminateCar(rival, car.seatToken);
+          }
+        }
+        break;
+      case 'rocket':
+        this.projectiles.push({
+          x: car.x + Math.cos(car.angle) * 24,
+          y: car.y + Math.sin(car.angle) * 24,
+          vx: Math.cos(car.angle) * 260,
+          vy: Math.sin(car.angle) * 260,
+          owner: car.seatToken,
+          damage: PHY.POWERUP_ROCKET_DAMAGE,
+          life: PHY.POWERUP_ROCKET_LIFE_MS / 1000,
+          color: '#ff7b00',
+          radius: 8,
+          explosive: true,
+          homing: true,
+          splashRadius: 70,
+        });
+        break;
+      case 'frenzy':
+        car.frenzyUntil = this.tickCount +
+          Math.floor(PHY.POWERUP_FRENZY_MS / 1000 * PHY.TICK_RATE_HZ);
+        car.boostUntil = Math.max(car.boostUntil, car.frenzyUntil);
+        break;
     }
+    this.io.to(this.roomCode).emit(EV.POWERUP_EFFECT, {
+      type,
+      seatToken: car.seatToken,
+      x: effectX,
+      y: effectY,
+    });
+  }
+
+  _activateStoredPower(car) {
+    if (!car.alive || !car.storedPower) return;
+    const powerType = car.storedPower;
+    car.storedPower = null;
+    this._applyPickupEffect(car, powerType);
+  }
+
+  _rollPowerup() {
+    const powers = [
+      'repair', 'ammo', 'shield', 'nitro', 'star', 'emp', 'bomb',
+      'banana', 'lightning', 'rocket', 'frenzy',
+    ];
+    return powers[Math.floor(Math.random() * powers.length)];
   }
 
   /* ── Constrain car to track road surface ──────────────────────────────── */
@@ -459,13 +662,25 @@ class GameRoom {
     }
 
     const dist = Math.sqrt(minDist);
-    const maxDist = PHY.ROAD_HALF_WIDTH * 2.15;
+    // Keep the car body inside the usable road width instead of allowing it
+    // to drift through the shoulder and decorative track limits.
+    // Use track.roadHalfWidth as the single physical source-of-truth (same as visual).
+    const trackRoadHW = this.track.roadHalfWidth || PHY.ROAD_HALF_WIDTH;
+    const maxDist = Math.max(12, trackRoadHW - PHY.CAR_RADIUS * 0.35);
 
     if (dist > maxDist) {
-      // Softly return to the road. Do not repeatedly kill velocity at turns.
-      const correction = Math.min((dist - maxDist) * 0.22, 18);
-      car.x += ((nearestX - car.x) / dist) * correction;
-      car.y += ((nearestY - car.y) / dist) * correction;
+      const normalX = (car.x - nearestX) / dist;
+      const normalY = (car.y - nearestY) / dist;
+      car.x = nearestX + normalX * maxDist;
+      car.y = nearestY + normalY * maxDist;
+
+      // Remove only the outward velocity so the car can continue along the
+      // barrier instead of being stopped or launched off the circuit.
+      const outwardSpeed = car.vx * normalX + car.vy * normalY;
+      if (outwardSpeed > 0) {
+        car.vx -= normalX * outwardSpeed;
+        car.vy -= normalY * outwardSpeed;
+      }
 
       // Damage for hitting walls hard
       if (dist > maxDist * 1.2 && car.speed > 100) {
@@ -487,8 +702,16 @@ class GameRoom {
     const dx = car.x - cp.x;
     const dy = car.y - cp.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
+    const segmentDistance = pointToSegmentDistance(
+      cp.x,
+      cp.y,
+      car.previousX,
+      car.previousY,
+      car.x,
+      car.y
+    );
 
-    if (dist < PHY.CHECKPOINT_RADIUS) {
+    if (Math.min(dist, segmentDistance) < PHY.CHECKPOINT_RADIUS) {
       car.currentCP = (cpIdx + 1) % this.track.numCheckpoints;
 
       // Lap completed when wrapping around to 0
@@ -512,9 +735,31 @@ class GameRoom {
             name:      car.name,
             place:     car.finishPlace,
             time:      car.finishTime,
+            dnf:       false,
             kills:     car.kills,
             deaths:    car.deaths,
             specialBoxes: car.specialBoxes,
+            powerHits: car.arcadeItemHitBonus || 0,
+          });
+
+          // If this is the 1st car across the line, start countdown for remaining players
+          if (this.firstFinishedTick == null) {
+            this.firstFinishedTick = this.tickCount;
+            this.firstFinishedTime = this.elapsedTime;
+            this.firstFinishedWallTime = Date.now();
+            const timeoutSec = this.settings.finishTimeoutSeconds || 45;
+            this.io.to(this.roomCode).emit(EV.RACE_COUNTDOWN_FINISH, {
+              seconds: timeoutSec,
+              firstPlaceName: car.name,
+            });
+            console.log(`[game] ${car.name} finished P1! DNF countdown: ${timeoutSec}s`);
+          }
+
+          this.io.to(this.roomCode).emit(EV.CAR_FINISHED, {
+            seatToken: car.seatToken,
+            name: car.name,
+            place: car.finishPlace,
+            time: car.finishTime,
           });
           console.log(`[game] ${car.name} finished P${car.finishPlace} in ${this.roomCode}`);
         }
@@ -526,7 +771,8 @@ class GameRoom {
   _handleFiring(car) {
     if (!car.input.fire || car.ammo <= 0) return;
 
-    const ticksBetweenShots = Math.floor(PHY.TICK_RATE_HZ / car.fireRateHz);
+    const frenzyFactor = this.tickCount < car.frenzyUntil ? 0.5 : 1;
+    const ticksBetweenShots = Math.max(1, Math.floor(PHY.TICK_RATE_HZ / car.fireRateHz * frenzyFactor));
     if (this.tickCount - car.lastFireTick < ticksBetweenShots) return;
 
     car.lastFireTick = this.tickCount;
@@ -588,6 +834,29 @@ class GameRoom {
     // Update projectiles
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i];
+      if (p.homing) {
+        let target = null;
+        let targetDistance = Infinity;
+        for (const [, candidate] of this.cars) {
+          if (candidate.seatToken === p.owner || !candidate.alive) continue;
+          const distance = Math.hypot(candidate.x - p.x, candidate.y - p.y);
+          if (distance < targetDistance) {
+            target = candidate;
+            targetDistance = distance;
+          }
+        }
+        if (target) {
+          const desiredAngle = Math.atan2(target.y - p.y, target.x - p.x);
+          const currentAngle = Math.atan2(p.vy, p.vx);
+          let delta = desiredAngle - currentAngle;
+          while (delta > Math.PI) delta -= Math.PI * 2;
+          while (delta < -Math.PI) delta += Math.PI * 2;
+          const nextAngle = currentAngle + Math.max(-0.16, Math.min(0.16, delta));
+          const speed = Math.max(220, Math.hypot(p.vx, p.vy));
+          p.vx = Math.cos(nextAngle) * speed;
+          p.vy = Math.sin(nextAngle) * speed;
+        }
+      }
       p.x    += p.vx * dt;
       p.y    += p.vy * dt;
       p.life -= dt;
@@ -608,6 +877,10 @@ class GameRoom {
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist < PHY.CAR_RADIUS + p.radius) {
+          if (this.tickCount < car.powerInvulnUntil) {
+            this.projectiles.splice(i, 1);
+            break;
+          }
           if (this.tickCount < car.shieldUntil) {
             // Shield absorbed hit!
             car.shieldUntil = 0;
@@ -645,6 +918,10 @@ class GameRoom {
         const dx = car.x - m.x;
         const dy = car.y - m.y;
         if (Math.sqrt(dx * dx + dy * dy) < m.radius + PHY.CAR_RADIUS) {
+          if (this.tickCount < car.powerInvulnUntil) {
+            m.alive = false;
+            break;
+          }
           if (this.tickCount < car.shieldUntil) {
             // Shield absorbed mine explosion!
             car.shieldUntil = 0;
@@ -653,9 +930,21 @@ class GameRoom {
           }
 
           car.health -= m.damage * (1 - car.armorMult * 0.5);
-          const kb = m.damage * 2;
-          car.vx += (dx / Math.max(1, Math.abs(dx))) * kb;
-          car.vy += (dy / Math.max(1, Math.abs(dy))) * kb;
+          const distance = Math.max(1, Math.hypot(dx, dy));
+          const kb = m.kind === 'banana' ? 85 : m.damage * 2;
+          car.vx += (dx / distance) * kb;
+          car.vy += (dy / distance) * kb;
+          if (m.kind === 'banana') {
+            car.slowUntil = Math.max(car.slowUntil,
+              this.tickCount + Math.floor(PHY.POWERUP_BANANA_SLOW_MS / 1000 * PHY.TICK_RATE_HZ));
+            car.angle += Math.PI * 0.45;
+          }
+          this.io.to(this.roomCode).emit(EV.POWERUP_EFFECT, {
+            type: m.kind || 'bomb',
+            seatToken: car.seatToken,
+            x: car.x,
+            y: car.y,
+          });
           m.alive = false;
 
           if (car.health <= 0) {
@@ -705,12 +994,35 @@ class GameRoom {
             b.vy += ny * dot * bShare * PHY.CAR_BOUNCE;
           }
 
-          // Minor collision damage
+          if (ARCADE) {
+            // In arcade mode: collisions separate and bounce.
+            // If one car has invincibility active, stun the rival with cooldown.
+            if (this.itemSystem) {
+              const aInv = this.itemSystem.isInvincible(a);
+              const bInv = this.itemSystem.isInvincible(b);
+              if (aInv && !bInv && (!b.arcadeInvHitCooldown || this.tickCount > b.arcadeInvHitCooldown)) {
+                b.arcadeInvHitCooldown = this.tickCount + Math.round(2.5 * PHY.TICK_RATE_HZ);
+                this.itemSystem._applyHit(b, a.seatToken, 'invencibilidad');
+              } else if (bInv && !aInv && (!a.arcadeInvHitCooldown || this.tickCount > a.arcadeInvHitCooldown)) {
+                a.arcadeInvHitCooldown = this.tickCount + Math.round(2.5 * PHY.TICK_RATE_HZ);
+                this.itemSystem._applyHit(a, b.seatToken, 'invencibilidad');
+              }
+            }
+            continue;
+          }
+
+          // Classic mode: impact damage
           const impactSpeed = Math.abs(dot);
-          if (impactSpeed > 80) {
-            const dmg = PHY.COLLISION_DAMAGE * (impactSpeed / 200);
-            a.health -= dmg * (1 - a.armorMult * 0.3);
-            b.health -= dmg * (1 - b.armorMult * 0.3);
+          if (impactSpeed > 20) {
+            const dmg = PHY.COLLISION_DAMAGE * Math.max(0.35, impactSpeed / 160);
+            if (this.tickCount >= a.powerInvulnUntil) {
+              a.health -= dmg * (1 - a.armorMult * 0.3);
+            }
+            if (this.tickCount >= b.powerInvulnUntil) {
+              b.health -= dmg * (1 - b.armorMult * 0.3);
+            }
+            if (a.health <= 0) this._eliminateCar(a, b.seatToken);
+            if (b.health <= 0) this._eliminateCar(b, a.seatToken);
           }
         }
       }
@@ -739,6 +1051,8 @@ class GameRoom {
     const cp = this.track.checkpoints[car.currentCP] || this.track.checkpoints[0];
     car.x = cp.x;
     car.y = cp.y;
+    car.previousX = cp.x;
+    car.previousY = cp.y;
     car.angle = cp.angle || 0;
     car.vx = 0;
     car.vy = 0;
@@ -746,6 +1060,10 @@ class GameRoom {
     car.health = PHY.MAX_HEALTH;
     car.alive = true;
     car.invulnUntil = this.tickCount + Math.floor(PHY.TICK_RATE_HZ * (PHY.RESPAWN_INVULN_MS / 1000));
+    car.arcadeInvEnd   = 0;
+    car.arcadeBoostEnd = 0;
+    car.arcadeStunEnd  = 0;
+    car.arcadeInkEnd   = 0;
   }
 
   /* ── Get terrain at position ──────────────────────────────────────────── */
@@ -774,34 +1092,88 @@ class GameRoom {
   /* ── Check if race is over ────────────────────────────────────────────── */
   _checkRaceEnd() {
     const activeCars = Array.from(this.cars.values()).filter(c => c.name);
-    const allFinished = activeCars.every(c => c.finished);
+    if (activeCars.length === 0) return;
 
-    if (allFinished && activeCars.length > 0) {
+    const allFinished = activeCars.every(c => c.finished);
+    const timeoutSec = this.settings.finishTimeoutSeconds || 45;
+    const timeoutTicks = Math.round(timeoutSec * PHY.TICK_RATE_HZ);
+    const timeoutExpired = this.firstFinishedTick != null && (
+      (this.tickCount - this.firstFinishedTick >= timeoutTicks) ||
+      (this.elapsedTime - this.firstFinishedTime >= timeoutSec) ||
+      (this.firstFinishedWallTime && Date.now() - this.firstFinishedWallTime >= timeoutSec * 1000)
+    );
+
+    if (allFinished || timeoutExpired) {
       this.state = 'finished';
-      const raceNumber = this.roomData.championship.raceNumber + 1;
+
+      // Any active car that did not finish in time gets DNF, ordered by progress
+      const unfinished = activeCars.filter(c => !c.finished);
+      if (unfinished.length > 0) {
+        unfinished.sort((a, b) => {
+          if (b.lap !== a.lap) return b.lap - a.lap;
+          if (b.currentCP !== a.currentCP) return b.currentCP - a.currentCP;
+          const cpA = this.track.checkpoints[a.currentCP] || { x: 0, y: 0 };
+          const cpB = this.track.checkpoints[b.currentCP] || { x: 0, y: 0 };
+          const distA = Math.hypot(a.x - cpA.x, a.y - cpA.y);
+          const distB = Math.hypot(b.x - cpB.x, b.y - cpB.y);
+          return distA - distB;
+        });
+
+        for (const car of unfinished) {
+          car.finished = false;
+          car.dnf = true;
+          car.finishPlace = this.finishOrder.length + 1;
+          this.finishOrder.push({
+            seatToken: car.seatToken,
+            name:      car.name,
+            place:     car.finishPlace,
+            time:      null,
+            dnf:       true,
+            kills:     car.kills || 0,
+            deaths:    car.deaths || 0,
+            specialBoxes: car.specialBoxes || 0,
+            powerHits: car.arcadeItemHitBonus || 0,
+          });
+          console.log(`[game] ${car.name} marked DNF at P${car.finishPlace} in ${this.roomCode}`);
+        }
+      }
+
+      const raceNumber = this.roomData.championship ? (this.roomData.championship.raceNumber + 1) : 1;
       const results = this.finishOrder.map(result => ({
         ...result,
         points: this._racePoints(result),
       }));
       const standings = this._updateStandings(results);
+      const trackOrder = this.settings.trackOrder || TRACKS_CONFIG.map(t => t.id);
+      const totalRaces = this.settings.mode === 'championship' ? trackOrder.length : 1;
       const championshipFinished = this.settings.mode !== 'championship' ||
-        this.roomData.championship.raceNumber >=
-        (this.settings.trackOrder || []).length - 1;
-      if (this.settings.mode === 'championship' && !championshipFinished) {
-        this.roomData.championship.raceNumber++;
-      }
-      this.io.to(this.roomCode).emit(EV.RACE_FINISHED, {
+        (this.roomData.championship && this.roomData.championship.raceNumber >= totalRaces - 1);
+
+      const nextTrackId = championshipFinished ? null :
+        trackOrder[(this.roomData.championship ? this.roomData.championship.raceNumber : 0) + 1];
+      const nextTrack = nextTrackId ? TRACKS_CONFIG.find(t => t.id === nextTrackId) : null;
+      const nextTrackName = nextTrack ? (nextTrack.name + (nextTrack.year ? ` · ${nextTrack.year}` : '')) : null;
+
+      const finishPayload = {
         results,
         standings,
         championshipFinished,
         raceNumber,
-        nextTrackId: championshipFinished ? null :
-          (this.settings.trackOrder || [])[this.roomData.championship.raceNumber],
+        totalRaces,
+        nextTrackId,
+        nextTrackName,
+        intermissionSeconds: this.settings.intermissionSeconds || 12,
         allCars: this._getCarSummaries(),
-      });
+      };
+
+      this.io.to(this.roomCode).emit(EV.RACE_FINISHED, finishPayload);
       this.roomData.state = SHARED.STATES.ROOM.RESULTS;
-      console.log(`[game] Race finished in ${this.roomCode}`);
+      console.log(`[game] Race ${raceNumber}/${totalRaces} finished in ${this.roomCode}`);
       this.stop();
+
+      if (typeof this.onFinish === 'function') {
+        this.onFinish(finishPayload);
+      }
     }
   }
 
@@ -809,6 +1181,14 @@ class GameRoom {
   _broadcastState() {
     const cars = [];
     for (const [, car] of this.cars) {
+      const arcadeFlags = ARCADE && this.itemSystem ? {
+        item:     car.arcadeItem,
+        rolling:  this.tickCount < car.arcadeRollEnd,
+        boost:    this.itemSystem.isBoostActive(car),
+        inv:      this.itemSystem.isInvincible(car),
+        stun:     this.itemSystem.isStunned(car),
+        ink:      this.itemSystem.isInked(car),
+      } : {};
       cars.push({
         st:    car.seatToken,
         nm:    car.name,
@@ -823,13 +1203,19 @@ class GameRoom {
         drift: car.drifting,
         fin:   car.finished,
         fp:    car.finishPlace,
-        ammo:  car.ammo,
+        ammo:  ARCADE ? 0 : car.ammo,
         clr:   car.color,
         cid:   car.carId,
-        wid:   car.weaponId,
-        inv:   this.tickCount < car.invulnUntil,
-        shield: this.tickCount < car.shieldUntil,
-        boost:  this.tickCount < car.boostUntil,
+        wid:   ARCADE ? null : car.weaponId,
+        inv:   ARCADE ? arcadeFlags.inv : this.tickCount < car.invulnUntil,
+        shield: ARCADE ? false : this.tickCount < car.shieldUntil,
+        star:  ARCADE ? arcadeFlags.inv : this.tickCount < car.powerInvulnUntil,
+        slowed: ARCADE ? arcadeFlags.stun : this.tickCount < car.slowUntil,
+        boost:  ARCADE ? arcadeFlags.boost : this.tickCount < car.boostUntil,
+        frenzy: false,
+        power: ARCADE ? car.arcadeItem : car.storedPower,
+        rolling: ARCADE ? arcadeFlags.rolling : false,
+        ink:    ARCADE ? arcadeFlags.ink : false,
         steer:  +car.input.steer.toFixed(2),
         steerAngle: +(car.steerAngle.toFixed(3)),
         firing: Boolean(car.input.fire),
@@ -847,6 +1233,7 @@ class GameRoom {
 
     for (let i = 0; i < cars.length; i++) {
       cars[i].pos = i + 1; // race position
+      cars[i].pts = SCORING.positionPoints[i] || SCORING.defaultRemainingPoints;
     }
 
     const projs = this.projectiles.map(p => ({
@@ -862,8 +1249,14 @@ class GameRoom {
       x:    Math.round(m.x),
       y:    Math.round(m.y),
       c:    m.color,
+      k:    m.kind || 'mine',
       armed: this.tickCount >= m.armTick,
     }));
+
+    // Arcade item state
+    const arcadeState = (ARCADE && this.itemSystem)
+      ? this.itemSystem.getStateSnapshot()
+      : null;
 
     this.io.to(this.roomCode).emit(EV.GAME_STATE, {
       tick:   this.tickCount,
@@ -871,14 +1264,20 @@ class GameRoom {
       cars,
       projs,
       mines:  mns,
-      pickups: this.pickups.map(p => ({
+      pickups: ARCADE ? [] : this.pickups.map(p => ({
         id:  p.id,
         t:   p.type,
         x:   p.x,
         y:   p.y,
         act: p.active,
       })),
+      // Arcade item system state
+      itemBoxes:   arcadeState ? arcadeState.boxes   : [],
+      itemDiscs:   arcadeState ? arcadeState.discs   : [],
+      itemMissiles:arcadeState ? arcadeState.missiles : [],
+      itemOils:    arcadeState ? arcadeState.oils    : [],
       laps:   this.totalLaps,
+      arcade: ARCADE,
     });
   }
 
@@ -926,6 +1325,11 @@ class GameRoom {
   _racePoints(result) {
     const position = SCORING.positionPoints[result.place - 1] ??
       SCORING.defaultRemainingPoints;
+    if (ARCADE) {
+      return position +
+        (result.powerHits || 0) * (SCORING.pointsPerPowerHit || 1) +
+        (SCORING.pointsFastestLap && result.fastestLap ? SCORING.pointsFastestLap : 0);
+    }
     return position +
       result.kills * SCORING.pointsPerKill +
       result.specialBoxes * SCORING.pointsPerSpecialBox +
@@ -933,6 +1337,7 @@ class GameRoom {
   }
 
   _updateStandings(results) {
+    if (!this.roomData.championship) return results;
     const standings = this.roomData.championship.standings;
     for (const result of results) {
       const previous = standings.get(result.seatToken) || {
@@ -941,19 +1346,28 @@ class GameRoom {
         points: 0,
         races: 0,
         wins: 0,
+        podiums: 0,
+        dnfs: 0,
+        lastRacePlace: 99,
         kills: 0,
         deaths: 0,
       };
       previous.name = result.name;
       previous.points += result.points;
       previous.races++;
-      previous.wins += result.place === 1 ? 1 : 0;
+      previous.wins += result.place === 1 && !result.dnf ? 1 : 0;
+      previous.podiums += result.place <= 3 && !result.dnf ? 1 : 0;
+      if (result.dnf) previous.dnfs++;
+      previous.lastRacePlace = result.place;
       previous.kills += result.kills;
       previous.deaths += result.deaths;
       standings.set(result.seatToken, previous);
     }
     return Array.from(standings.values()).sort((a, b) =>
-      b.points - a.points || b.wins - a.wins || b.kills - a.kills
+      (b.points - a.points) ||
+      (b.wins - a.wins) ||
+      ((b.podiums || 0) - (a.podiums || 0)) ||
+      ((a.lastRacePlace || 99) - (b.lastRacePlace || 99))
     ).map((entry, index) => ({ ...entry, place: index + 1 }));
   }
 }

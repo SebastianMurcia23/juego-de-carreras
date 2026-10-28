@@ -70,9 +70,19 @@ function getRoomCode() {
 
 /* ─── Loadout UI & 360 Animated Preview ─────────────────────────────────── */
 function initGuestLoadoutUI() {
+  const ARCADE = Boolean(window.ROAD_RUMBLE_FLAGS && window.ROAD_RUMBLE_FLAGS.ARCADE_ITEMS !== false);
+  if (ARCADE) {
+    const ws = document.querySelector('.weapons-showcase');
+    if (ws) ws.style.display = 'none';
+    const lc = document.querySelector('.loadout-container');
+    if (lc) { lc.style.gridTemplateColumns = '1fr'; lc.style.maxWidth = '640px'; }
+    const hint = $('guest-ready-status-text');
+    if (hint) hint.textContent = 'Pulsa cuando hayas definido tu vehículo.';
+  }
+
   // Populate weapon buttons
   const grid = $('guest-weapons-grid');
-  if (grid) {
+  if (grid && !ARCADE) {
     grid.innerHTML = WEAPONS.map(w => `
       <button class="weapon-btn ${w.id === S.selectedWeaponId ? 'selected' : ''}" data-weapon-id="${w.id}">
         <span class="weapon-icon">${w.icon}</span>
@@ -95,12 +105,12 @@ function initGuestLoadoutUI() {
     S.previewAnim = window.CAR_RENDERER.startPreviewAnimation(
       previewCanvas,
       () => CARS[S.selectedCarIndex],
-      () => WEAPONS.find(w => w.id === S.selectedWeaponId)
+      () => ARCADE ? null : WEAPONS.find(w => w.id === S.selectedWeaponId)
     );
   }
 
   updateGuestCarDisplay();
-  updateGuestWeaponDetails();
+  if (!ARCADE) updateGuestWeaponDetails();
 }
 
 function selectGuestCar(index) {
@@ -161,11 +171,12 @@ function syncLoadoutToServer() {
   if (!S.socket || !S.seatToken) return;
   const currentCar = CARS[S.selectedCarIndex];
   if (!currentCar) return;
+  const ARCADE = Boolean(window.ROAD_RUMBLE_FLAGS && window.ROAD_RUMBLE_FLAGS.ARCADE_ITEMS !== false);
 
   S.socket.emit(EV.SELECT_LOADOUT, {
     seatToken: S.seatToken,
     carId: currentCar.id,
-    weaponId: S.selectedWeaponId
+    weaponId: ARCADE ? null : S.selectedWeaponId
   });
 }
 
@@ -173,6 +184,7 @@ function toggleGuestReady() {
   S.isReady = !S.isReady;
   const btn = $('guest-btn-ready');
   const hint = $('guest-ready-status-text');
+  const ARCADE = Boolean(window.ROAD_RUMBLE_FLAGS && window.ROAD_RUMBLE_FLAGS.ARCADE_ITEMS !== false);
 
   if (S.isReady) {
     btn.classList.add('is-ready');
@@ -182,7 +194,7 @@ function toggleGuestReady() {
   } else {
     btn.classList.remove('is-ready');
     btn.textContent = 'LISTO PARA CORRER';
-    hint.textContent = 'Pulsa cuando hayas definido tu carro y arma.';
+    hint.textContent = ARCADE ? 'Pulsa cuando hayas definido tu vehículo.' : 'Pulsa cuando hayas definido tu carro y arma.';
   }
 
   if (S.socket && S.seatToken) {
@@ -336,13 +348,50 @@ function initSocket() {
 
   socket.on(EV.PICKUP_COLLECTED, (data) => {
     if (window.GAME_RENDERER && data.x != null && data.y != null) {
-      let label = '+OBJETO';
+      let label = '¡PODER GUARDADO! Pulsa PODER / E';
       let col = '#fee440';
-      if (data.type === 'repair') { label = '+35 HP'; col = '#55a630'; }
-      else if (data.type === 'ammo') { label = '+MUNICIÓN'; col = '#fee440'; }
-      else if (data.type === 'shield') { label = '¡ESCUDO!'; col = '#00f5d4'; }
-      else if (data.type === 'nitro') { label = '¡SUPER NITRO!'; col = '#f72585'; }
+      if (data.type === 'star') { label += ' ★'; col = '#ffd166'; }
+      else if (data.type === 'banana') { label += ' 🍌'; col = '#f4d35e'; }
+      else if (data.type === 'lightning') { label += ' ϟ'; col = '#8ecae6'; }
+      else if (data.type === 'rocket') { label += ' ➤'; col = '#ff7b00'; }
+      else if (data.type === 'frenzy') { label += ' ✦'; col = '#ff6b35'; }
       window.GAME_RENDERER.addFloatingText(label, data.x, data.y, col);
+      if (window.GAME_RENDERER.triggerPowerEffect) {
+        window.GAME_RENDERER.triggerPowerEffect({ type: 'pickup', x: data.x, y: data.y });
+      }
+    }
+  });
+
+  socket.on(EV.POWERUP_EFFECT, (data) => {
+    if (window.GAME_RENDERER && window.GAME_RENDERER.triggerPowerEffect) {
+      window.GAME_RENDERER.triggerPowerEffect(data);
+    }
+  });
+
+  // Arcade Item Events
+  socket.on(EV.ITEM_BOX_TAKEN, (data) => {
+    if (window.GAME_RENDERER && window.GAME_RENDERER.handleItemEvent) {
+      window.GAME_RENDERER.handleItemEvent(EV.ITEM_BOX_TAKEN, data);
+    }
+  });
+  socket.on(EV.ITEM_ROLLING, (data) => {
+    if (window.GAME_RENDERER && window.GAME_RENDERER.handleItemEvent) {
+      window.GAME_RENDERER.handleItemEvent(EV.ITEM_ROLLING, data);
+    }
+  });
+  socket.on(EV.ITEM_USED, (data) => {
+    if (window.GAME_RENDERER && window.GAME_RENDERER.handleItemEvent) {
+      window.GAME_RENDERER.handleItemEvent(EV.ITEM_USED, data);
+    }
+  });
+  socket.on(EV.ITEM_HIT, (data) => {
+    if (window.GAME_RENDERER && window.GAME_RENDERER.handleItemEvent) {
+      window.GAME_RENDERER.handleItemEvent(EV.ITEM_HIT, data);
+    }
+  });
+  socket.on(EV.ITEM_BLOCKED, (data) => {
+    if (window.GAME_RENDERER && window.GAME_RENDERER.handleItemEvent) {
+      window.GAME_RENDERER.handleItemEvent(EV.ITEM_BLOCKED, data);
     }
   });
 

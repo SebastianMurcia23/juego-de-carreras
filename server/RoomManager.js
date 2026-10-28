@@ -326,6 +326,7 @@ class RoomManager {
       carId: seat.carId,
       weaponId: seat.weaponId,
       isReady: seat.isReady,
+      roomState: room.state,
       settings: room.settings,
       config: this.getConfigCatalog(),
     };
@@ -342,6 +343,11 @@ class RoomManager {
 
     const seat = room.seats.get(seatToken);
     if (!seat) return { error: 'SEAT_INVALID' };
+
+    // If vehicle is already confirmed, lock changes until unlocked
+    if (seat.isReady) {
+      return { error: 'VEHICLE_CONFIRMED_LOCKED', message: 'Desbloquea tu vehículo con "Cambiar" para elegir otro.' };
+    }
 
     // Validate car and weapon exist in catalog
     if (carId && CARS.some(c => c.id === carId)) {
@@ -383,6 +389,11 @@ class RoomManager {
 
     const seat = room.seats.get(seatToken);
     if (!seat) return { error: 'SEAT_INVALID' };
+
+    // Validate car exists
+    if (!seat.carId || !CARS.some(c => c.id === seat.carId)) {
+      seat.carId = CARS[0]?.id || 'apex_venom';
+    }
 
     seat.isReady = Boolean(isReady);
     seat.state = seat.isReady ? STATES.SEAT.READY : STATES.SEAT.SELECTING;
@@ -493,6 +504,16 @@ class RoomManager {
       return { error: 'NO_PLAYERS' };
     }
 
+    // Ensure all unconfirmed players get a valid car and are marked confirmed
+    for (const seat of linkedPlayers) {
+      if (!seat.carId || !CARS.some(c => c.id === seat.carId)) {
+        seat.carId = CARS[0]?.id || 'apex_venom';
+      }
+      seat.isReady = true;
+      seat.state = STATES.SEAT.READY;
+    }
+    this._broadcastPlayers(roomCode);
+
     room.state = STATES.ROOM.COUNTDOWN;
 
     if (room.settings.mode === 'championship') {
@@ -513,6 +534,9 @@ class RoomManager {
     // Create and start the GameRoom physics engine
     try {
       room.gameRoom = new GameRoom(this.io, roomCode, room);
+      room.gameRoom.onFinish = (payload) => {
+        this._handleRaceFinished(roomCode, payload);
+      };
       room.gameRoom.start();
       room.state = STATES.ROOM.RACING;
       console.log(`[game] Room ${roomCode} game started!`);
@@ -522,6 +546,95 @@ class RoomManager {
     }
 
     return { success: true, state: room.state };
+  }
+
+  /* ── Championship progression & automated track rotation ─────────────── */
+
+  _handleRaceFinished(roomCode, payload) {
+    const room = this.rooms.get(roomCode);
+    if (!room) return;
+
+    if (room.settings.mode === 'championship') {
+      if (payload.championshipFinished) {
+        room.state = 'championship_finished';
+        this.io.to(roomCode).emit(EV.CHAMPIONSHIP_FINISHED, {
+          standings: payload.standings,
+          totalRaces: payload.totalRaces,
+        });
+        console.log(`[championship] Room ${roomCode} championship finished! Winner: ${payload.standings[0]?.name}`);
+      } else {
+        const delayMs = (room.settings.intermissionSeconds || 12) * 1000;
+        if (room.intermissionTimer) clearTimeout(room.intermissionTimer);
+        room.intermissionTimer = setTimeout(() => {
+          this.advanceChampionship(roomCode);
+        }, delayMs);
+        console.log(`[championship] Room ${roomCode} scheduled next race in ${delayMs / 1000}s`);
+      }
+    }
+  }
+
+  advanceChampionship(roomCode, hostToken = null) {
+    const room = this.rooms.get(roomCode);
+    if (!room) return { error: 'ROOM_NOT_FOUND' };
+    if (hostToken && !this.validateHostToken(roomCode, hostToken)) {
+      return { error: 'UNAUTHORIZED' };
+    }
+    if (room.intermissionTimer) {
+      clearTimeout(room.intermissionTimer);
+      room.intermissionTimer = null;
+    }
+
+    if (room.settings.mode !== 'championship') {
+      return { error: 'NOT_CHAMPIONSHIP' };
+    }
+
+    room.championship.raceNumber++;
+    const trackOrder = room.settings.trackOrder || TRACKS.map(t => t.id);
+    if (room.championship.raceNumber >= trackOrder.length) {
+      room.state = 'championship_finished';
+      return { success: true, finished: true };
+    }
+
+    const nextTrackId = trackOrder[room.championship.raceNumber];
+    room.settings.trackId = nextTrackId;
+
+    if (room.gameRoom) {
+      room.gameRoom.stop();
+      room.gameRoom = null;
+    }
+
+    // Keep cumulative standings and player identities, reset per-race readiness
+    for (const [, seat] of room.seats) {
+      seat.state = STATES.SEAT.READY;
+      seat.isReady = true;
+    }
+
+    room.state = STATES.ROOM.COUNTDOWN;
+
+    this.io.to(roomCode).emit(EV.GAME_STARTING, {
+      countdownSeconds: 3,
+      trackId: nextTrackId,
+      mode: 'championship',
+      raceNumber: room.championship.raceNumber + 1,
+      totalRaces: trackOrder.length,
+      laps: room.settings.laps,
+      players: this._playerList(roomCode),
+    });
+
+    try {
+      room.gameRoom = new GameRoom(this.io, roomCode, room);
+      room.gameRoom.onFinish = (payload) => {
+        this._handleRaceFinished(roomCode, payload);
+      };
+      room.gameRoom.start();
+      room.state = STATES.ROOM.RACING;
+      console.log(`[championship] Room ${roomCode} started race ${room.championship.raceNumber + 1}/${trackOrder.length} (${nextTrackId})`);
+    } catch (e) {
+      console.error('[championship] Failed to start next race:', e);
+      return { error: 'START_FAILED' };
+    }
+
+    return { success: true, raceNumber: room.championship.raceNumber + 1, trackId: nextTrackId };
   }
 
   /* ── Stage 3: Get active game room ─────────────────────────────────────── */

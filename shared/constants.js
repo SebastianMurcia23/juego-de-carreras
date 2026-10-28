@@ -59,12 +59,25 @@ SHARED.EVENTS = {
   GAME_COUNTDOWN:     'game_countdown',     // server → all: { seconds }
   GAME_STATE:         'game_state',         // server → all: full sim snapshot
   RACE_FINISHED:      'race_finished',      // server → all: final results
+  CAR_FINISHED:       'car_finished',       // server → all: one car crossed the finish
+  RACE_COUNTDOWN_FINISH: 'race_countdown_finish', // server → all: finish countdown timer
+  CHAMPIONSHIP_INTERMISSION: 'championship_intermission', // server → all: countdown to next race
+  NEXT_RACE:          'next_race',          // client → server: host skips intermission
   CHAMPIONSHIP_FINISHED:'championship_finished',
   LAP_COMPLETED:      'lap_completed',      // server → specific player
   PLAYER_ELIMINATED:  'player_eliminated',  // server → all
   TRACK_DATA:         'track_data',         // server → all: track geometry
   PICKUP_COLLECTED:   'pickup_collected',   // server → player/all: { type, carName, seatToken }
+  POWERUP_EFFECT:     'powerup_effect',     // server → all: visual power activation
   BOOST_PAD_TRIGGERED:'boost_pad_triggered',// server → player: { seatToken }
+
+  // Arcade item system events (ARCADE_ITEMS mode)
+  ITEM_BOX_TAKEN:     'item_box_taken',   // server → all: { seatToken, boxId, item }
+  ITEM_ROLLING:       'item_rolling',     // server → seat: { seatToken } — ruleta iniciada
+  ITEM_USED:          'item_used',        // server → all: { seatToken, item }
+  ITEM_HIT:           'item_hit',         // server → all: { victim, attacker, item }
+  ITEM_BLOCKED:       'item_blocked',     // server → all: { seatToken, item }
+  ITEM_SETTINGS:      'item_settings',    // server → all: { itemDistribution }
 
   // Generic error
   ERROR:              'error',
@@ -87,6 +100,35 @@ SHARED.STATES = {
   },
 };
 
+/* ─── Arcade Item System ────────────────────────────────────────────────── */
+/**
+ * Canonical item IDs — server, client, tests must use these strings exactly.
+ * The reference HTML uses 'estrella' as an alias; here the canonical id is
+ * 'invencibilidad'.  The client ITEM_DATA map accepts both for backwards compat.
+ */
+SHARED.ARCADE = {
+  ITEM_IDS:   ['turbo', 'disco', 'misil', 'aceite', 'invencibilidad', 'tinta'],
+  ITEM_NAMES: {
+    turbo:          'Turbo',
+    disco:          'Disco rebotante',
+    misil:          'Misil buscador',
+    aceite:         'Mancha de aceite',
+    invencibilidad: 'Invencibilidad',
+    tinta:          'Tinta',
+  },
+  /**
+   * Distribution mode ids — stored in room settings as 'itemDistribution'.
+   * 'positional' : Mario Kart rank-based weight matrix.
+   * 'balanced'   : Equal probability for all 6 items.
+   * 'rotation'   : Items cycle in fixed order (useful for testing).
+   */
+  DIST_MODES: {
+    POSITIONAL: 'positional',
+    BALANCED:   'balanced',
+    ROTATION:   'rotation',
+  },
+};
+
 /* ─── Hard limits ───────────────────────────────────────────────────────── */
 SHARED.LIMITS = {
   MAX_PLAYERS:              12,
@@ -102,8 +144,8 @@ SHARED.PHYSICS = {
   COUNTDOWN_SECONDS: 3,
 
   // Car physics (Stage 3 & Realistic Driving Model)
-  ACCEL_FORCE:       360,       // px/s² (faster, punchier acceleration)
-  BRAKE_FORCE:       540,       // px/s² (strong, responsive braking)
+  ACCEL_FORCE:       620,       // px/s² (faster, punchier acceleration)
+  BRAKE_FORCE:       700,       // px/s² (keeps high-speed braking responsive)
   REVERSE_FORCE:     160,       // px/s²
   FRICTION:          0.988,     // velocity damping per tick
   DRAG:              0.00015,   // aerodynamic drag coefficient
@@ -120,6 +162,8 @@ SHARED.PHYSICS = {
   DRIFT_GRIP_MULT:   0.38,      // backward compat
   DRIFT_STEER_BOOST: 1.5,       // steering boost while drifting
   DRIFT_SPEED_RETAIN:0.95,      // speed retained when entering drift
+  CAR_SPEED_MULTIPLIER: 1.8,    // faster top speed while preserving each car's stat ratio
+  SPEED_DISPLAY_FACTOR: 0.5,    // world px/s to dashboard km/h
 
   // Terrain grip multipliers
   TERRAIN_GRIP: {
@@ -144,11 +188,30 @@ SHARED.PHYSICS = {
   RESPAWN_INVULN_MS: 2000,
 
   // Track
-  ROAD_HALF_WIDTH:   65,        // half-width of the road in px
-  CHECKPOINT_RADIUS: 70,        // radius to "pass" a checkpoint
+  // TRACK_WIDTH_SCALE: factor to scale all road widths at once. 1.0 = default (92 px half-width).
+  // To widen further: raise TRACK_WIDTH_SCALE and ROAD_HALF_WIDTH together.
+  TRACK_WIDTH_SCALE:       1.0,
+  ROAD_HALF_WIDTH:         92,  // physical collision margin — now matches the visual render width
+  TRACK_RENDER_HALF_WIDTH: 92,  // four visual lanes, each 46 px wide (sync with ROAD_HALF_WIDTH)
+  TRACK_LENGTH_SCALE: 1.15,     // longer circuits without changing handling scale
+  TRACK_LANE_COUNT: 4,
+  CHECKPOINT_RADIUS: 105,       // radius to "pass" a checkpoint (scaled for 92 px road half-width)
 
   // Stage 6: Pickups & Boost Pads
   BOOST_PAD_FORCE:       260,   // forward velocity boost (px/s)
+  POWERUP_STAR_MS: 5000,
+  POWERUP_EMP_MS: 3500,
+  POWERUP_EMP_FACTOR: 0.45,
+  POWERUP_BOMB_DAMAGE: 32,
+  POWERUP_BOMB_RADIUS: 120,
+  POWERUP_LIGHTNING_DAMAGE: 18,
+  POWERUP_LIGHTNING_RADIUS: 260,
+  POWERUP_LIGHTNING_MS: 1800,
+  POWERUP_BANANA_DAMAGE: 18,
+  POWERUP_BANANA_SLOW_MS: 1600,
+  POWERUP_ROCKET_DAMAGE: 28,
+  POWERUP_ROCKET_LIFE_MS: 2800,
+  POWERUP_FRENZY_MS: 5000,
   BOOST_PAD_DURATION_MS: 1200,  // boost effect duration
   BOOST_PAD_COOLDOWN_MS: 800,   // pad cooldown per car
   PICKUP_RADIUS:         24,    // pickup collection radius (px)

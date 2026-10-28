@@ -22,7 +22,9 @@ var GR = {
   countdownEnd: 0,
   raceFinished: false,
   results:    null,
+  arrivals:   [],
   floatingTexts: [],
+  powerEffects: [],
   chaseMotion: null,
   chaseBackdrop: null,
 };
@@ -56,6 +58,8 @@ function init(canvasId, localSeatToken) {
   GR.running  = true;
   GR.raceFinished = false;
   GR.results  = null;
+  GR.arrivals = [];
+  GR.powerEffects = [];
   GR.chaseMotion = null;
   GR.chaseBackdrop = null;
 
@@ -65,6 +69,60 @@ function init(canvasId, localSeatToken) {
   // Start render loop
   if (GR.animFrame) cancelAnimationFrame(GR.animFrame);
   renderLoop();
+}
+
+function drawPowerEffects(ctx) {
+  var now = Date.now();
+  for (var i = GR.powerEffects.length - 1; i >= 0; i--) {
+    var effect = GR.powerEffects[i];
+    var progress = (now - effect.start) / effect.life;
+    if (progress >= 1) {
+      GR.powerEffects.splice(i, 1);
+      continue;
+    }
+    var color = effect.type === 'lightning' ? '#8ecae6' :
+      effect.type === 'rocket' ? '#ff7b00' :
+      effect.type === 'banana' ? '#f4d35e' :
+      effect.type === 'frenzy' ? '#ff6b35' : '#ffd166';
+    ctx.save();
+    ctx.translate(effect.x, effect.y);
+    ctx.globalAlpha = 1 - progress;
+    ctx.strokeStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 18;
+    ctx.lineWidth = 4;
+    if (effect.type === 'lightning') {
+      ctx.beginPath();
+      ctx.moveTo(0, -42 * progress);
+      ctx.lineTo(-12, -18);
+      ctx.lineTo(5, -12);
+      ctx.lineTo(-5, 18);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, 0, 25 + progress * 80, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.arc(0, 0, 14 + progress * 52, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-26, 0); ctx.lineTo(26, 0);
+      ctx.moveTo(0, -26); ctx.lineTo(0, 26);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+function triggerPowerEffect(effect) {
+  if (!effect || effect.x == null || effect.y == null) return;
+  GR.powerEffects.push({
+    type: effect.type,
+    x: effect.x,
+    y: effect.y,
+    start: Date.now(),
+    life: effect.type === 'lightning' ? 850 : 650,
+  });
 }
 
 function drawChaseCar(ctx, car, weapon, color) {
@@ -131,6 +189,7 @@ function drawChaseCar(ctx, car, weapon, color) {
     ctx.fillStyle = weapon.color || accent;
     ctx.fillRect(length * 0.1, -3, 13, 6);
   }
+
   ctx.restore();
 }
 
@@ -175,6 +234,13 @@ function setCountdown(seconds) {
 function setResults(results) {
   GR.raceFinished = true;
   GR.results = Array.isArray(results) ? { results: results } : results;
+}
+
+function setArrival(arrival) {
+  if (!arrival || !arrival.seatToken) return;
+  if (!GR.arrivals.some(function(item) { return item.seatToken === arrival.seatToken; })) {
+    GR.arrivals.push(arrival);
+  }
 }
 
 /* ─── Main render loop ─────────────────────────────────────────────────── */
@@ -243,6 +309,14 @@ function drawFallbackRace(ctx, W, H) {
   ctx.moveTo(W * 0.56, H * 0.25);
   ctx.lineTo(W * 0.94, H);
   ctx.stroke();
+  if (m.k === 'banana') {
+    ctx.fillStyle = '#6b4f1d';
+    ctx.fillRect(-2, -8, 4, 5);
+    ctx.fillStyle = '#f4d35e';
+    ctx.beginPath();
+    ctx.arc(0, 1, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
   drawSimpleLocalCar(ctx, W / 2, H * 0.8, '#00f5d4');
 }
 
@@ -292,6 +366,7 @@ function drawFixedTrackScene(ctx, W, H) {
   drawMines(ctx);
   drawProjectiles(ctx);
   drawCars(ctx);
+  drawPowerEffects(ctx);
   ctx.restore();
 
   var local = getLocalCar();
@@ -354,12 +429,12 @@ function drawFixedTrackScene(ctx, W, H) {
       var projectedLateral = lateral * perspective;
       var curveX = W / 2 + Math.max(-W * 0.32, Math.min(W * 0.32, projectedLateral));
       var y = horizon + Math.pow(depth, 0.62) * (roadBottom - horizon);
-      var halfWidth = Math.max(7, Math.min(W * 0.44, 7 + Math.pow(depth, 1.18) * W * 0.44));
+      var halfWidth = Math.max(7, Math.min(W * 0.48, 7 + Math.pow(depth, 1.18) * W * 0.48));
       points.push({ x: curveX, y: y, w: halfWidth, terrain: cp.terrain || 'asphalt' });
     }
 
     points.push({ x: W / 2, y: horizon, w: 8, terrain: 'asphalt' });
-    points.push({ x: W / 2, y: roadBottom, w: W * 0.44, terrain: 'asphalt' });
+    points.push({ x: W / 2, y: roadBottom, w: W * 0.48, terrain: 'asphalt' });
     points.sort(function(a, b) { return a.y - b.y; });
 
     for (var p = points.length - 2; p >= 0; p--) {
@@ -400,7 +475,6 @@ function drawFixedTrackScene(ctx, W, H) {
       }
     }
 
-    drawChaseEnvironment(ctx, W, H, points);
     drawChaseOpponents(ctx, W, H, local, motion);
     drawChaseProjectiles(ctx, W, H, motion);
     ctx.save();
@@ -746,6 +820,14 @@ function drawCars(ctx) {
       ctx.shadowColor = '#ffffff';
       ctx.shadowBlur = 15;
     }
+    if (car.star || car.frenzy) {
+      ctx.globalAlpha = 0.65 + Math.sin(Date.now() / 70) * 0.25;
+      ctx.shadowColor = car.star ? '#ffd166' : '#ff6b35';
+      ctx.shadowBlur = 24;
+    } else if (car.slowed) {
+      ctx.shadowColor = '#8ecae6';
+      ctx.shadowBlur = 18;
+    }
 
     if (isLocal) {
       drawThirdPersonCar(ctx, carDef, weaponDef, color);
@@ -770,6 +852,10 @@ function drawCars(ctx) {
     }
 
     function drawThirdPersonCar(ctx, car, weapon, color) {
+      if (window.CAR_RENDERER && car) {
+        window.CAR_RENDERER.drawCar(ctx, 0, 0, car, weapon, 0, 0.72);
+        return;
+      }
       var length = (car.dimensions && car.dimensions.length || 64) * 0.58;
       var width = (car.dimensions && car.dimensions.width || 36) * 0.58;
       var primary = car.color || color || '#00f5d4';
@@ -884,6 +970,18 @@ function drawCars(ctx) {
       ctx.beginPath();
       ctx.arc(0, 0, sRadius, 0, Math.PI * 2);
       ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
+    if (car.star || car.frenzy || car.slowed) {
+      ctx.save();
+      ctx.translate(car.x, car.y);
+      var stateColor = car.star ? '#ffd166' : car.frenzy ? '#ff6b35' : '#8ecae6';
+      ctx.strokeStyle = stateColor;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.65 + Math.sin(Date.now() / 100) * 0.25;
+      ctx.beginPath();
+      ctx.arc(0, 0, 30 + Math.sin(Date.now() / 130) * 3, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
@@ -1006,11 +1104,19 @@ function drawPickups(ctx) {
     ctx.translate(0, bob);
 
     var color = '#fee440';
-    var icon = '⚡';
+    var icon = '?';
+    if (pk.t === 'item_box') { color = '#9b5de5'; icon = '?'; }
     if (pk.t === 'repair') { color = '#55a630'; icon = '🔧'; }
     else if (pk.t === 'ammo')   { color = '#fee440'; icon = '⚡'; }
     else if (pk.t === 'shield') { color = '#00f5d4'; icon = '🛡️'; }
     else if (pk.t === 'nitro')  { color = '#f72585'; icon = '💥'; }
+    else if (pk.t === 'star')   { color = '#ffd166'; icon = '★'; }
+    else if (pk.t === 'emp')    { color = '#4361ee'; icon = '⚡'; }
+    else if (pk.t === 'bomb')   { color = '#e63946'; icon = '✹'; }
+    else if (pk.t === 'banana') { color = '#f4d35e'; icon = '●'; }
+    else if (pk.t === 'lightning') { color = '#8ecae6'; icon = 'ϟ'; }
+    else if (pk.t === 'rocket') { color = '#ff7b00'; icon = '➤'; }
+    else if (pk.t === 'frenzy') { color = '#ff6b35'; icon = '✦'; }
 
     // Glow aura
     ctx.shadowColor = color;
@@ -1034,6 +1140,30 @@ function drawPickups(ctx) {
     ctx.fillText(icon, 0, 0);
 
     ctx.restore();
+  }
+
+  // Draw arcade item boxes if in ARCADE mode
+  if (GR.gameState && GR.gameState.itemBoxes) {
+    for (var b = 0; b < GR.gameState.itemBoxes.length; b++) {
+      var box = GR.gameState.itemBoxes[b];
+      if (!box.act) continue;
+      ctx.save();
+      ctx.translate(box.x, box.y);
+      var bobB = Math.sin(now / 220 + b) * 3;
+      ctx.translate(0, bobB);
+      var hue = Math.floor((now / 20 + b * 40) % 360);
+      ctx.fillStyle = 'hsl(' + hue + ', 85%, 60%)';
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.fillRect(-12, -12, 24, 24);
+      ctx.strokeRect(-12, -12, 24, 24);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 16px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('?', 0, 0);
+      ctx.restore();
+    }
   }
 }
 
@@ -1076,18 +1206,68 @@ function drawFloatingTexts(ctx) {
 
 /* ─── Draw Projectiles ─────────────────────────────────────────────────── */
 function drawProjectiles(ctx) {
-  if (!GR.gameState || !GR.gameState.projs) return;
+  if (!GR.gameState) return;
 
-  for (var i = 0; i < GR.gameState.projs.length; i++) {
-    var p = GR.gameState.projs[i];
-    ctx.fillStyle = p.c || '#ffd166';
-    ctx.shadowColor = p.c || '#ffd166';
-    ctx.shadowBlur = 6;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.r || 3, 0, Math.PI * 2);
-    ctx.fill();
+  if (GR.gameState.projs) {
+    for (var i = 0; i < GR.gameState.projs.length; i++) {
+      var p = GR.gameState.projs[i];
+      ctx.fillStyle = p.c || '#ffd166';
+      ctx.shadowColor = p.c || '#ffd166';
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r || 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
   }
-  ctx.shadowBlur = 0;
+
+  // Arcade Discs
+  if (GR.gameState.itemDiscs) {
+    for (var d = 0; d < GR.gameState.itemDiscs.length; d++) {
+      var disc = GR.gameState.itemDiscs[d];
+      ctx.save();
+      ctx.translate(disc.x, disc.y);
+      ctx.fillStyle = '#2fbf71';
+      ctx.beginPath();
+      ctx.arc(0, 0, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // Arcade Missiles
+  if (GR.gameState.itemMissiles) {
+    for (var m = 0; m < GR.gameState.itemMissiles.length; m++) {
+      var miss = GR.gameState.itemMissiles[m];
+      ctx.save();
+      ctx.translate(miss.x, miss.y);
+      ctx.rotate(miss.ang || 0);
+      ctx.fillStyle = '#e24b4a';
+      ctx.fillRect(-10, -5, 20, 10);
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(10, -5); ctx.lineTo(16, 0); ctx.lineTo(10, 5);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // Arcade Oils
+  if (GR.gameState.itemOils) {
+    for (var o = 0; o < GR.gameState.itemOils.length; o++) {
+      var oil = GR.gameState.itemOils[o];
+      ctx.save();
+      ctx.translate(oil.x, oil.y);
+      ctx.fillStyle = 'rgba(16, 16, 24, 0.9)';
+      ctx.beginPath();
+      ctx.arc(0, 0, oil.r || 18, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
 }
 
 /* ─── Draw Mines ───────────────────────────────────────────────────────── */
@@ -1132,7 +1312,9 @@ function drawHUD(ctx, W, H) {
   ctx.save();
 
   // Speed display (bottom-left)
-  var speedKmh = Math.round(local.spd * 0.5); // Convert px/s to ~km/h display
+  var speedFactor = (window.SHARED && window.SHARED.PHYSICS &&
+    window.SHARED.PHYSICS.SPEED_DISPLAY_FACTOR) || 0.5;
+  var speedKmh = Math.round(local.spd * speedFactor); // Convert px/s to dashboard km/h
   ctx.fillStyle = '#0a0d14cc';
   roundRect(ctx, 16 * dpr, H - 90 * dpr, 140 * dpr, 74 * dpr, 10 * dpr);
   ctx.fill();
@@ -1170,7 +1352,8 @@ function drawHUD(ctx, W, H) {
   ctx.fillStyle = '#f72585';
   ctx.font = 'bold ' + (22 * dpr) + 'px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText((local.lap + 1) + '/' + laps, W / 2, 46 * dpr);
+  var currentLap = Math.min(laps, (local.lap || 0) + (local.fin ? 0 : 1));
+  ctx.fillText(currentLap + '/' + laps, W / 2, 46 * dpr);
 
   ctx.fillStyle = '#ffffffaa';
   ctx.font = (10 * dpr) + 'px sans-serif';
@@ -1292,6 +1475,20 @@ function drawMiniMap(ctx, W, H) {
     ctx.stroke();
   }
 
+  // Start/finish marker remains visible even when the camera is elsewhere.
+  var start = cps[0];
+  if (start) {
+    var sx = offsetX + (start.x - bounds.minX) * scale;
+    var sy = offsetY + (start.y - bounds.minY) * scale;
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#f72585';
+    ctx.lineWidth = 2 * dpr;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 5 * dpr, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
   // Car dots
   var cars = GR.gameState.cars;
   for (var ci = 0; ci < cars.length; ci++) {
@@ -1307,6 +1504,55 @@ function drawMiniMap(ctx, W, H) {
     ctx.fill();
   }
 
+  ctx.restore();
+  drawLeaderboard(ctx, W, H);
+}
+
+function drawLeaderboard(ctx, W, H) {
+  if (!GR.gameState || !Array.isArray(GR.gameState.cars)) return;
+
+  var dpr = window.devicePixelRatio || 1;
+  var visibleCars = GR.gameState.cars.slice(0, 8);
+  var panelWidth = Math.min(220 * dpr, W - 32 * dpr);
+  var panelX = W - panelWidth - 16 * dpr;
+  var panelY = 166 * dpr;
+  var panelHeight = (30 + visibleCars.length * 20) * dpr;
+
+  ctx.save();
+  ctx.fillStyle = '#0a0d14dd';
+  roundRect(ctx, panelX, panelY, panelWidth, panelHeight, 8 * dpr);
+  ctx.fill();
+
+  ctx.fillStyle = '#00f5d4';
+  ctx.font = 'bold ' + (11 * dpr) + 'px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('CLASIFICACIÓN', panelX + 10 * dpr, panelY + 16 * dpr);
+
+  for (var i = 0; i < visibleCars.length; i++) {
+    var car = visibleCars[i];
+    var rowY = panelY + (31 + i * 20) * dpr;
+    var isLocal = car.st === GR.localSeat;
+    var positionColor = i === 0 ? '#ffd700' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : '#ffffffaa';
+    var name = String(car.nm || 'Piloto').substring(0, 14);
+
+    ctx.fillStyle = isLocal ? '#00f5d4' : positionColor;
+    ctx.font = 'bold ' + (10 * dpr) + 'px sans-serif';
+    ctx.fillText((i + 1) + '. ' + name, panelX + 10 * dpr, rowY);
+
+    ctx.textAlign = 'right';
+    ctx.fillStyle = isLocal ? '#ffffff' : '#ffffffaa';
+    ctx.font = (9 * dpr) + 'px sans-serif';
+    ctx.fillText(car.fin ? 'LLEGÓ P' + car.fp : 'V' +
+      Math.min(GR.gameState.laps || 3, (car.lap || 0) + 1) +
+      '  ' + (car.pts || 0) + ' pts', panelX + panelWidth - 10 * dpr, rowY);
+    ctx.textAlign = 'left';
+  }
+  if (GR.arrivals.length) {
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#ffd166';
+    ctx.font = 'bold ' + (10 * dpr) + 'px sans-serif';
+    ctx.fillText('LLEGADAS: ' + GR.arrivals.length, panelX + 10 * dpr, panelY + panelHeight - 8 * dpr);
+  }
   ctx.restore();
 }
 
@@ -1413,6 +1659,8 @@ window.GAME_RENDERER = {
   setGameState:    setGameState,
   setCountdown:    setCountdown,
   setResults:      setResults,
+  triggerPowerEffect: triggerPowerEffect,
+  setArrival:        setArrival,
   getLocalCar:     getLocalCar,
   addFloatingText: addFloatingText,
 };

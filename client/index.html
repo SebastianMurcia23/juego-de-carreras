@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Road Rumble – Crear sala</title>
-  <meta name="description" content="Road Rumble: juego de carreras multijugador con armas. Crea una sala y juega con tus amigos." />
+  <meta name="description" content="Road Rumble: juego de carreras multijugador estilo kart. Crea una sala y juega con tus amigos." />
   <link rel="manifest" href="/manifest.webmanifest" />
   <link rel="stylesheet" href="/css/style.css?v=5" />
 </head>
@@ -21,7 +21,7 @@
   <div class="flex-col items-center gap-16">
     <div class="flex-col items-center gap-8">
       <h1 class="title-xl">ROAD<br>RUMBLE</h1>
-      <p class="title-sm">Carreras con armamento · Multijugador web</p>
+      <p class="title-sm">Carreras arcade estilo kart · Multijugador web</p>
     </div>
 
     <!-- Decorative car silhouette (canvas-drawn) -->
@@ -213,11 +213,11 @@
         </div>
       </div>
 
-      <!-- Right Column: Weapon Selector & Ready State -->
+      <!-- Right Column: Vehicle Ready State (arcade: no weapons) -->
       <div class="glass weapons-showcase">
         <div class="flex-row items-center justify-between" style="justify-content:space-between;">
-          <p class="title-sm" style="font-size:0.75rem;">ARMA MONTADA (1 POR CARRERA)</p>
-          <span class="text-muted" style="font-size:0.75rem;">7 Armas tácticas</span>
+          <p class="title-sm" style="font-size:0.75rem;">PODERES ARCADE</p>
+          <span class="text-muted" style="font-size:0.75rem;">6 poderes por caja</span>
         </div>
 
         <!-- Weapon Selection Grid -->
@@ -256,10 +256,10 @@
         <!-- Ready Button -->
         <div class="mt-auto flex-col gap-12">
           <button id="btn-toggle-ready" class="btn-ready">
-            LISTO PARA CORRER
+            🏎️ Confirmar Vehículo
           </button>
           <p id="ready-status-text" class="text-muted" style="font-size:0.75rem; text-align:center;">
-            Pulsa cuando hayas definido tu carro y arma.
+            Pulsa cuando hayas elegido tu vehículo.
           </p>
         </div>
 
@@ -296,14 +296,14 @@
 
   <!-- Stage 2: Match Configuration -->
   <div class="admin-settings-group">
-    <p class="title-sm" style="font-size:0.7rem; color:var(--cyan);">CONFIGURACIÓN DE CARRERA</p>
+    <p class="title-sm" style="font-size:0.7rem; color:var(--cyan);">⚙️ CONFIGURACIÓN DE CARRERA</p>
 
     <!-- Game Mode -->
     <div class="flex-col gap-4">
       <label for="admin-select-mode" style="font-size:0.75rem; color:var(--text-muted);">MODO DE JUEGO</label>
       <select id="admin-select-mode" class="admin-select">
-        <option value="championship">🏆 Campeonato (10 pistas en secuencia)</option>
-        <option value="single">🏁 Carrera Única (Pista seleccionada)</option>
+        <option value="championship">🏆 Campeonato (varias pistas en secuencia)</option>
+        <option value="single">🏁 Carrera Única (pista seleccionada abajo)</option>
       </select>
     </div>
 
@@ -327,8 +327,8 @@
         </select>
       </div>
 
-      <!-- Ammo Multiplier -->
-      <div class="flex-col gap-4" style="flex:1;">
+      <!-- Ammo Multiplier (classic mode only – hidden in arcade) -->
+      <div id="admin-ammo-group" class="flex-col gap-4" style="flex:1;">
         <label for="admin-select-ammo" style="font-size:0.75rem; color:var(--text-muted);">MUNICIÓN</label>
         <select id="admin-select-ammo" class="admin-select">
           <option value="1.0" selected>100% (Normal)</option>
@@ -337,6 +337,16 @@
           <option value="999">Infinita (Caos)</option>
         </select>
       </div>
+    </div>
+
+    <!-- Item Distribution (ARCADE mode only) -->
+    <div id="admin-itemdist-group" class="flex-col gap-4" style="display:none;">
+      <label for="admin-select-itemdist" style="font-size:0.75rem; color:var(--text-muted);">DISTRIBUCIÓN DE PODERES</label>
+      <select id="admin-select-itemdist" class="admin-select">
+        <option value="positional" selected>🏆 Por posición – estilo Mario Kart (recomendado)</option>
+        <option value="balanced">⚖️ Equilibrada – 1/6 por poder (≤3 carros)</option>
+        <option value="rotation">🔄 Rotación fija – para pruebas</option>
+      </select>
     </div>
   </div>
 
@@ -359,7 +369,7 @@
       🚀 ¡INICIAR CARRERA!
     </button>
     <p id="admin-start-hint" class="text-muted" style="font-size:0.72rem; text-align:center; line-height:1.5;">
-      Se iniciará con una cuenta regresiva 3-2-1.
+      Todos confirmen su vehículo antes de iniciar.
     </p>
   </div>
 </div>
@@ -373,13 +383,18 @@
 
 <!-- ─── Scripts ──────────────────────────────────────────────────────────── -->
 <script src="/shared/constants.js?v=8"></script>
+<script src="/config/feature-flags.js"></script>
+<script src="/config/cars.legacy.js"></script>
+<script src="/config/cars.f1.js"></script>
 <script src="/config/cars.js?v=5"></script>
 <script src="/config/weapons.js?v=5"></script>
+<script src="/config/tracks.legacy.js"></script>
+<script src="/config/tracks.f1.js"></script>
 <script src="/config/tracks.js?v=5"></script>
 <script src="/config/scoring.js?v=5"></script>
 <script src="/js/renderCar.js?v=5"></script>
 <script src="/js/productHub.js?v=2"></script>
-<script src="/js/gameRenderer.js?v=6"></script>
+<script src="/js/gameRenderer.js?v=7"></script>
 <script src="/vendor/three/build/three.min.js"></script>
 <script src="/vendor/three/examples/js/postprocessing/Pass.js"></script>
 <script src="/vendor/three/examples/js/postprocessing/ShaderPass.js"></script>
@@ -388,8 +403,10 @@
 <script src="/vendor/three/examples/js/postprocessing/EffectComposer.js"></script>
 <script src="/vendor/three/examples/js/postprocessing/RenderPass.js"></script>
 <script src="/vendor/three/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/js/threeGameRenderer.js?v=7"></script>
+<script src="/js/fx/particles.js"></script>
+<script src="/js/fx/itemMeshes.js"></script>
+<script src="/js/threeGameRenderer.js?v=18"></script>
 <script src="/socket.io/socket.io.js"></script>
-<script src="/js/main.js?v=5"></script>
+<script src="/js/main.js?v=7"></script>
 </body>
 </html>

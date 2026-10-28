@@ -5,7 +5,8 @@
   "main": "server/index.js",
   "scripts": {
     "start": "node server/index.js",
-    "dev": "nodemon server/index.js"
+    "dev": "nodemon server/index.js",
+    "test": "node tools/verify-tracks.js && node tools/verify-bots.js && node tools/verify-items.js && node tools/verify-items-bounds.js"
   },
   "dependencies": {
     "express": "^4.18.2",

@@ -191,11 +191,11 @@
         </div>
       </div>
 
-      <!-- Right Column: Weapon Selector & Ready State -->
+      <!-- Right Column: Vehicle Ready State (arcade: no weapons) -->
       <div class="glass weapons-showcase">
         <div class="flex-row items-center justify-between" style="justify-content:space-between;">
-          <p class="title-sm" style="font-size:0.75rem;">ARMA MONTADA (1 POR CARRERA)</p>
-          <span class="text-muted" style="font-size:0.75rem;">7 Armas tácticas</span>
+          <p class="title-sm" style="font-size:0.75rem;">PODERES ARCADE</p>
+          <span class="text-muted" style="font-size:0.75rem;">6 poderes por caja</span>
         </div>
 
         <!-- Weapon Selection Grid -->
@@ -234,10 +234,10 @@
         <!-- Ready Button -->
         <div class="mt-auto flex-col gap-12">
           <button id="guest-btn-ready" class="btn-ready">
-            LISTO PARA CORRER
+            🏎️ Confirmar Vehículo
           </button>
           <p id="guest-ready-status-text" class="text-muted" style="font-size:0.75rem; text-align:center;">
-            Pulsa cuando hayas definido tu carro y arma.
+            Pulsa cuando hayas elegido tu vehículo.
           </p>
         </div>
 
@@ -256,13 +256,18 @@
 
 <!-- ─── Scripts ──────────────────────────────────────────────────────────── -->
 <script src="/shared/constants.js?v=8"></script>
+<script src="/config/feature-flags.js"></script>
+<script src="/config/cars.legacy.js"></script>
+<script src="/config/cars.f1.js"></script>
 <script src="/config/cars.js"></script>
 <script src="/config/weapons.js"></script>
+<script src="/config/tracks.legacy.js"></script>
+<script src="/config/tracks.f1.js"></script>
 <script src="/config/tracks.js"></script>
 <script src="/config/scoring.js"></script>
 <script src="/js/renderCar.js"></script>
 <script src="/js/productHub.js?v=2"></script>
-<script src="/js/gameRenderer.js?v=6"></script>
+<script src="/js/gameRenderer.js?v=7"></script>
 <script src="/vendor/three/build/three.min.js"></script>
 <script src="/vendor/three/examples/js/postprocessing/Pass.js"></script>
 <script src="/vendor/three/examples/js/postprocessing/ShaderPass.js"></script>
@@ -271,8 +276,10 @@
 <script src="/vendor/three/examples/js/postprocessing/EffectComposer.js"></script>
 <script src="/vendor/three/examples/js/postprocessing/RenderPass.js"></script>
 <script src="/vendor/three/examples/js/postprocessing/UnrealBloomPass.js"></script>
-<script src="/js/threeGameRenderer.js?v=7"></script>
+<script src="/js/fx/particles.js"></script>
+<script src="/js/fx/itemMeshes.js"></script>
+<script src="/js/threeGameRenderer.js?v=18"></script>
 <script src="/socket.io/socket.io.js"></script>
-<script src="/js/player.js"></script>
+<script src="/js/player.js?v=2"></script>
 </body>
 </html>

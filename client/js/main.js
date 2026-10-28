@@ -20,10 +20,11 @@ var S = {
   isReady:          false,
   previewAnim:      null,
   settings: {
-    mode:           'championship',
-    trackId:        'track_01_neon_city',
-    laps:           3,
-    ammoMultiplier: 1.0
+    mode:             'championship',
+    trackId:          'track_01_neon_city',
+    laps:             3,
+    ammoMultiplier:   1.0,
+    itemDistribution: 'positional',
   }
 };
 
@@ -237,13 +238,23 @@ function initSocket() {
 
   S.socket.on(EV.PICKUP_COLLECTED, function(data) {
     if (window.GAME_RENDERER && data.x != null && data.y != null) {
-      var label = '+OBJETO';
+      var label = '¡PODER GUARDADO! Pulsa PODER / E';
       var col = '#fee440';
-      if (data.type === 'repair') { label = '+35 HP'; col = '#55a630'; }
-      else if (data.type === 'ammo') { label = '+MUNICIÓN'; col = '#fee440'; }
-      else if (data.type === 'shield') { label = '¡ESCUDO!'; col = '#00f5d4'; }
-      else if (data.type === 'nitro') { label = '¡SUPER NITRO!'; col = '#f72585'; }
+      if (data.type === 'star') { label += ' ★'; col = '#ffd166'; }
+      else if (data.type === 'banana') { label += ' 🍌'; col = '#f4d35e'; }
+      else if (data.type === 'lightning') { label += ' ϟ'; col = '#8ecae6'; }
+      else if (data.type === 'rocket') { label += ' ➤'; col = '#ff7b00'; }
+      else if (data.type === 'frenzy') { label += ' ✦'; col = '#ff6b35'; }
       window.GAME_RENDERER.addFloatingText(label, data.x, data.y, col);
+      if (window.GAME_RENDERER.triggerPowerEffect) {
+        window.GAME_RENDERER.triggerPowerEffect({ type: 'pickup', x: data.x, y: data.y });
+      }
+    }
+  });
+
+  S.socket.on(EV.POWERUP_EFFECT, function(data) {
+    if (window.GAME_RENDERER && window.GAME_RENDERER.triggerPowerEffect) {
+      window.GAME_RENDERER.triggerPowerEffect(data);
     }
   });
 
@@ -251,7 +262,42 @@ function initSocket() {
     if (window.GAME_RENDERER) {
       window.GAME_RENDERER.setResults(data);
     }
-    toast(data.championshipFinished ? '🏆 ¡Campeonato finalizado!' : '🏆 ¡Carrera finalizada!', 'success', 8000);
+  });
+
+  S.socket.on(EV.CAR_FINISHED, function(data) {
+    if (window.GAME_RENDERER && window.GAME_RENDERER.setArrival) {
+      window.GAME_RENDERER.setArrival(data);
+    }
+    if (data && data.name) {
+      showToast('🏁 ' + data.name + ' llegó en P' + data.place);
+    }
+  });
+
+  // Arcade Item Events
+  S.socket.on(EV.ITEM_BOX_TAKEN, function(data) {
+    if (window.GAME_RENDERER && window.GAME_RENDERER.handleItemEvent) {
+      window.GAME_RENDERER.handleItemEvent(EV.ITEM_BOX_TAKEN, data);
+    }
+  });
+  S.socket.on(EV.ITEM_ROLLING, function(data) {
+    if (window.GAME_RENDERER && window.GAME_RENDERER.handleItemEvent) {
+      window.GAME_RENDERER.handleItemEvent(EV.ITEM_ROLLING, data);
+    }
+  });
+  S.socket.on(EV.ITEM_USED, function(data) {
+    if (window.GAME_RENDERER && window.GAME_RENDERER.handleItemEvent) {
+      window.GAME_RENDERER.handleItemEvent(EV.ITEM_USED, data);
+    }
+  });
+  S.socket.on(EV.ITEM_HIT, function(data) {
+    if (window.GAME_RENDERER && window.GAME_RENDERER.handleItemEvent) {
+      window.GAME_RENDERER.handleItemEvent(EV.ITEM_HIT, data);
+    }
+  });
+  S.socket.on(EV.ITEM_BLOCKED, function(data) {
+    if (window.GAME_RENDERER && window.GAME_RENDERER.handleItemEvent) {
+      window.GAME_RENDERER.handleItemEvent(EV.ITEM_BLOCKED, data);
+    }
   });
 
   S.socket.on(EV.LOADOUT_UPDATED, function(data) {
@@ -495,8 +541,18 @@ function drawLogo() {
 
 /* -------------------------------------------------------- loadout UI */
 function initLoadoutUI() {
+  var ARCADE = (window.ROAD_RUMBLE_FLAGS && window.ROAD_RUMBLE_FLAGS.ARCADE_ITEMS !== false);
+  if (ARCADE) {
+    var ws = document.querySelector('.weapons-showcase');
+    if (ws) ws.style.display = 'none';
+    var lc = document.querySelector('.loadout-container');
+    if (lc) { lc.style.gridTemplateColumns = '1fr'; lc.style.maxWidth = '640px'; }
+    var hint = $('ready-status-text');
+    if (hint) hint.textContent = 'Pulsa cuando hayas definido tu vehículo.';
+  }
+
   var grid = $('weapons-grid');
-  if (grid && WEAPONS.length) {
+  if (grid && WEAPONS.length && !ARCADE) {
     var html = '';
     for (var i = 0; i < WEAPONS.length; i++) {
       var w = WEAPONS[i];
@@ -532,6 +588,7 @@ function initLoadoutUI() {
       previewCanvas,
       function() { return CARS[S.selectedCarIndex]; },
       function() {
+        if (ARCADE) return null;
         for (var i = 0; i < WEAPONS.length; i++) {
           if (WEAPONS[i].id === S.selectedWeaponId) return WEAPONS[i];
         }
@@ -540,10 +597,14 @@ function initLoadoutUI() {
     );
   }
   updateCarDisplay();
-  updateWeaponDetails();
+  if (!ARCADE) updateWeaponDetails();
 }
 
 function selectCar(index) {
+  if (S.isReady) {
+    toast('Vehículo confirmado. Pulsa "Cambiar vehículo" para desbloquear.', 'info');
+    return;
+  }
   if (!CARS.length) return;
   S.selectedCarIndex = ((index % CARS.length) + CARS.length) % CARS.length;
   updateCarDisplay();
@@ -604,10 +665,11 @@ function syncLoadoutToServer() {
   if (!S.socket || !S.seatToken) return;
   var car = CARS[S.selectedCarIndex];
   if (!car) return;
+  var ARCADE = (window.ROAD_RUMBLE_FLAGS && window.ROAD_RUMBLE_FLAGS.ARCADE_ITEMS !== false);
   S.socket.emit(EV.SELECT_LOADOUT, {
     seatToken: S.seatToken,
     carId: car.id,
-    weaponId: S.selectedWeaponId
+    weaponId: ARCADE ? null : S.selectedWeaponId
   });
 }
 
@@ -615,15 +677,34 @@ function toggleReady() {
   S.isReady = !S.isReady;
   var btn  = $('btn-toggle-ready');
   var hint = $('ready-status-text');
-  if (btn) {
-    btn.classList.toggle('is-ready', S.isReady);
-    btn.textContent = S.isReady ? '\u2705 LISTO PARA CORRER!' : 'LISTO PARA CORRER';
+  var prevBtn = $('btn-car-prev');
+  var nextBtn = $('btn-car-next');
+  var ARCADE = (window.ROAD_RUMBLE_FLAGS && window.ROAD_RUMBLE_FLAGS.ARCADE_ITEMS !== false);
+
+  if (S.isReady) {
+    if (btn) {
+      btn.classList.add('is-ready');
+      btn.textContent = '✓ Vehículo Confirmado (Cambiar)';
+      btn.style.background = '#00f5d4';
+      btn.style.color = '#000';
+    }
+    if (prevBtn) { prevBtn.disabled = true; prevBtn.style.opacity = '0.35'; prevBtn.style.pointerEvents = 'none'; }
+    if (nextBtn) { nextBtn.disabled = true; nextBtn.style.opacity = '0.35'; nextBtn.style.pointerEvents = 'none'; }
+    if (hint) hint.textContent = '¡Vehículo confirmado! Esperando a los demás pilotos...';
+    toast('✓ Vehículo confirmado para la carrera', 'success', 2000);
+  } else {
+    if (btn) {
+      btn.classList.remove('is-ready');
+      btn.textContent = '🏎️ Confirmar Vehículo';
+      btn.style.background = '';
+      btn.style.color = '';
+    }
+    if (prevBtn) { prevBtn.disabled = false; prevBtn.style.opacity = ''; prevBtn.style.pointerEvents = ''; }
+    if (nextBtn) { nextBtn.disabled = false; nextBtn.style.opacity = ''; nextBtn.style.pointerEvents = ''; }
+    if (hint) hint.textContent = ARCADE ? 'Pulsa para confirmar tu vehículo.' : 'Pulsa cuando hayas definido tu carro y arma.';
+    toast('Vehículo desbloqueado para cambios', 'info', 2000);
   }
-  if (hint) {
-    hint.textContent = S.isReady
-      ? 'Estas listo! Esperando a los demas pilotos...'
-      : 'Pulsa cuando hayas definido tu carro y arma.';
-  }
+
   if (S.socket && S.seatToken) {
     S.socket.emit(EV.TOGGLE_READY, { seatToken: S.seatToken, isReady: S.isReady });
   }
@@ -633,21 +714,44 @@ function toggleReady() {
 function renderPlayerList(players) {
   S.players = players || [];
   var count = S.players.length;
-  setText('player-count-badge', count + ' / 12');
-  setText('admin-player-count', count + ' / 12');
+  var confirmedCount = S.players.filter(function(p) { return p.isReady; }).length;
+  var ARCADE = (window.ROAD_RUMBLE_FLAGS && window.ROAD_RUMBLE_FLAGS.ARCADE_ITEMS !== false);
+  setText('player-count-badge', confirmedCount + ' / ' + count + ' confirmados');
+  setText('admin-player-count', confirmedCount + ' / ' + count + ' confirmados');
+
+  var btnStart = $('btn-start-game');
+  if (btnStart) {
+    var allReady = count > 0 && S.players.every(function(p) { return p.isReady || !p.name; });
+    if (allReady) {
+      btnStart.innerHTML = '🏁 ¡INICIAR CARRERA! (Todos listos)';
+      btnStart.style.background = '#00f5d4';
+      btnStart.style.color = '#000';
+      btnStart.style.boxShadow = '0 0 20px rgba(0, 245, 212, 0.4)';
+    } else {
+      btnStart.innerHTML = '⚠️ Iniciar de todos modos (' + confirmedCount + '/' + count + ' listos)';
+      btnStart.style.background = '';
+      btnStart.style.color = '';
+      btnStart.style.boxShadow = '';
+    }
+  }
 
   var miniList = $('mini-player-list');
   if (miniList) {
     var html = '';
     for (var i = 0; i < S.players.length; i++) {
       var p = S.players[i];
+      var statusText = '';
+      if (!p.mobileConnected && p.name) statusText = '<span style="color:var(--pink);font-size:0.65rem;">Desconectado...</span>';
+      else if (p.isReady) statusText = '<span class="badge-ready" style="font-size:0.62rem;">✓ Confirmado</span>';
+      else if (p.name) statusText = '<span class="badge badge-linked" style="font-size:0.62rem;">Eligiendo</span>';
+      else statusText = '<span class="badge badge-qr" style="font-size:0.62rem;">Esperando QR</span>';
       html += '<div class="player-row">' +
         '<span class="player-num">#' + (i+1) + '</span>' +
-        '<span class="player-name">' + (p.name || '<em style="color:var(--text-dim)">Sin nombre</em>') +
+        '<span class="player-name">' + (p.name || '<em style="color:var(--text-dim)">Puesto libre</em>') +
         (p.isHost ? ' <span class="badge badge-host" style="font-size:0.6rem;">HOST</span>' : '') + '</span>' +
         '<div class="flex-row items-center gap-8">' +
-        '<span class="dot ' + (p.mobileConnected ? 'dot-on' : 'dot-off') + '"></span>' +
-        renderPlayerBadge(p) +
+        '<span class="dot ' + (p.mobileConnected ? 'dot-on' : (p.name ? 'dot-warn' : 'dot-off')) + '"></span>' +
+        statusText +
         '</div></div>';
     }
     miniList.innerHTML = html;
@@ -660,7 +764,9 @@ function renderPlayerList(players) {
       var ap = S.players[ai];
       var car    = findCar(ap.carId) || (CARS[0] || null);
       var weapon = findWeapon(ap.weaponId) || (WEAPONS[0] || null);
-      aHtml += '<div class="player-row" style="padding:10px 14px;">' +
+      var weaponSnippet = (!ARCADE && weapon) ? ('<span>·</span><span>' + weapon.icon + ' ' + weapon.name + '</span>') : '';
+      var disconnectedSnippet = (!ap.mobileConnected && ap.name) ? '<span style="color:var(--pink);font-size:0.65rem;">Desconectado (volviendo...)</span>' : '';
+      aHtml += '<div class="player-row" style="padding:10px 14px;' + (!ap.mobileConnected && ap.name ? 'opacity:0.6;' : '') + '">' +
         '<div class="player-thumb-wrap"><canvas class="player-thumb-canvas" id="thumb-admin-' + ai + '" width="42" height="26"></canvas></div>' +
         '<div class="flex-col" style="flex:1;min-width:0;">' +
         '<div class="player-name" style="font-size:0.85rem;font-weight:700;">' +
@@ -668,9 +774,11 @@ function renderPlayerList(players) {
         (ap.isHost ? ' <span class="badge badge-host" style="font-size:0.55rem;">HOST</span>' : '') + '</div>' +
         '<div style="font-size:0.68rem;color:var(--text-muted);display:flex;gap:8px;">' +
         '<span style="color:' + (car && car.color ? car.color : '#00f5d4') + ';font-weight:600;">' + (car ? car.name : 'Carro') + '</span>' +
-        '<span>·</span><span>' + (weapon ? weapon.icon + ' ' + weapon.name : 'Arma') + '</span></div></div>' +
+        weaponSnippet + '</div>' +
+        (disconnectedSnippet ? '<div style="margin-top:2px;">' + disconnectedSnippet + '</div>' : '') +
+        '</div>' +
         '<div class="flex-row items-center gap-8">' +
-        (ap.isReady ? '<span class="badge-ready">LISTO</span>' : '<span class="badge-selecting">Eligiendo</span>') +
+        (ap.isReady ? '<span class="badge-ready">✓ Confirmado</span>' : '<span class="badge-selecting">Eligiendo</span>') +
         (!ap.isHost ? '<button class="btn-kick" data-kick-token="' + ap.seatToken + '" title="Expulsar">X</button>' : '') +
         '</div></div>';
     }
@@ -681,7 +789,7 @@ function renderPlayerList(players) {
       if (tc && window.CAR_RENDERER) {
         var tcar = findCar(S.players[ti].carId) || (CARS[0] || null);
         var tweapon = findWeapon(S.players[ti].weaponId) || (WEAPONS[0] || null);
-        window.CAR_RENDERER.drawCar(tc.getContext('2d'), 21, 13, tcar, tweapon, 0, 0.45);
+        window.CAR_RENDERER.drawCar(tc.getContext('2d'), 21, 13, tcar, ARCADE ? null : tweapon, 0, 0.45);
       }
     }
 
@@ -703,8 +811,9 @@ function renderPlayerList(players) {
 }
 
 function renderPlayerBadge(p) {
-  if (p.isReady) return '<span class="badge-ready">LISTO</span>';
-  if (p.name)    return '<span class="badge badge-linked">ONLINE</span>';
+  if (!p.mobileConnected && p.name) return '<span style="color:var(--pink);font-size:0.65rem;">Desconectado...</span>';
+  if (p.isReady) return '<span class="badge-ready" style="font-size:0.65rem;">✓ Confirmado</span>';
+  if (p.name)    return '<span class="badge badge-linked">Eligiendo</span>';
   return '<span class="badge badge-qr">QR</span>';
 }
 
@@ -719,24 +828,33 @@ function findWeapon(weaponId) {
 }
 
 /* ------------------------------------------------- admin settings */
+var ARCADE_MODE = (window.ROAD_RUMBLE_FLAGS && window.ROAD_RUMBLE_FLAGS.ARCADE_ITEMS !== false);
+
 function syncAdminFormValues() {
-  var mode  = $('admin-select-mode');
-  var track = $('admin-select-track');
-  var laps  = $('admin-select-laps');
-  var ammo  = $('admin-select-ammo');
-  if (mode)  mode.value  = S.settings.mode          || 'championship';
-  if (track) track.value = S.settings.trackId        || 'track_01_neon_city';
-  if (laps)  laps.value  = String(S.settings.laps    || 3);
+  var mode   = $('admin-select-mode');
+  var track  = $('admin-select-track');
+  var laps   = $('admin-select-laps');
+  var ammo   = $('admin-select-ammo');
+  var idist  = $('admin-select-itemdist');
+  if (mode)  mode.value  = S.settings.mode            || 'championship';
+  if (track) track.value = S.settings.trackId          || 'track_01_neon_city';
+  if (laps)  laps.value  = String(S.settings.laps      || 3);
   if (ammo)  ammo.value  = String(S.settings.ammoMultiplier || 1.0);
+  if (idist) idist.value = S.settings.itemDistribution || 'balanced';
+  // Toggle visibility: show MUNICIÓN in classic, show DISTRIBUCIÓN in arcade
+  var ammoG = $('admin-ammo-group'),  idistG = $('admin-itemdist-group');
+  if (ammoG)  ammoG.style.display  = ARCADE_MODE ? 'none' : '';
+  if (idistG) idistG.style.display = ARCADE_MODE ? '' : 'none';
 }
 
 function updateAdminSettings() {
   if (!S.socket || !S.hostToken) return;
-  var mode = $('admin-select-mode')  ? $('admin-select-mode').value  : S.settings.mode;
-  var tid  = $('admin-select-track') ? $('admin-select-track').value : S.settings.trackId;
-  var laps = $('admin-select-laps')  ? parseInt($('admin-select-laps').value, 10) : S.settings.laps;
-  var ammo = $('admin-select-ammo')  ? parseFloat($('admin-select-ammo').value)   : S.settings.ammoMultiplier;
-  S.settings = merge(S.settings, { mode: mode, trackId: tid, laps: laps, ammoMultiplier: ammo });
+  var mode  = $('admin-select-mode')     ? $('admin-select-mode').value                    : S.settings.mode;
+  var tid   = $('admin-select-track')    ? $('admin-select-track').value                   : S.settings.trackId;
+  var laps  = $('admin-select-laps')     ? parseInt($('admin-select-laps').value, 10)       : S.settings.laps;
+  var ammo  = $('admin-select-ammo')     ? parseFloat($('admin-select-ammo').value)         : S.settings.ammoMultiplier;
+  var idist = $('admin-select-itemdist') ? $('admin-select-itemdist').value                : S.settings.itemDistribution;
+  S.settings = merge(S.settings, { mode: mode, trackId: tid, laps: laps, ammoMultiplier: ammo, itemDistribution: idist });
   S.socket.emit(EV.UPDATE_SETTINGS, { roomCode: S.roomCode, hostToken: S.hostToken, settings: S.settings });
 }
 
@@ -747,7 +865,7 @@ function handleStartGame() {
     if (!S.players[i].isReady && S.players[i].name) unready.push(S.players[i].name);
   }
   if (unready.length > 0) {
-    if (!confirm('Hay pilotos no listos (' + unready.join(', ') + '). Iniciar de todos modos?')) return;
+    if (!confirm('Hay pilotos sin confirmar su vehículo (' + unready.join(', ') + '). ¿Iniciar de todos modos asignándoles su carro actual?')) return;
   }
   var btn = $('btn-start-game');
   if (btn) { btn.disabled = true; btn.textContent = 'INICIANDO...'; }
@@ -797,10 +915,13 @@ function wireButtons() {
   var btnReady = $('btn-toggle-ready');
   if (btnReady) btnReady.addEventListener('click', toggleReady);
 
-  var selMode = $('admin-select-mode');   if (selMode)  selMode.addEventListener('change',  updateAdminSettings);
-  var selTrack = $('admin-select-track'); if (selTrack) selTrack.addEventListener('change', updateAdminSettings);
-  var selLaps = $('admin-select-laps');   if (selLaps)  selLaps.addEventListener('change',  updateAdminSettings);
-  var selAmmo = $('admin-select-ammo');   if (selAmmo)  selAmmo.addEventListener('change',  updateAdminSettings);
+  var selMode   = $('admin-select-mode');     if (selMode)   selMode.addEventListener('change',   updateAdminSettings);
+  var selTrack  = $('admin-select-track');    if (selTrack)  selTrack.addEventListener('change',  updateAdminSettings);
+  var selLaps   = $('admin-select-laps');     if (selLaps)   selLaps.addEventListener('change',   updateAdminSettings);
+  var selAmmo   = $('admin-select-ammo');     if (selAmmo)   selAmmo.addEventListener('change',   updateAdminSettings);
+  var selIdist  = $('admin-select-itemdist'); if (selIdist)  selIdist.addEventListener('change',  updateAdminSettings);
+  // Initial visibility toggle based on mode
+  syncAdminFormValues();
 
   var btnStart = $('btn-start-game');
   if (btnStart) btnStart.addEventListener('click', handleStartGame);
