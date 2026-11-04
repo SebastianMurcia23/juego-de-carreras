@@ -6,7 +6,7 @@
   <title>Road Rumble – Crear sala</title>
   <meta name="description" content="Road Rumble: juego de carreras multijugador estilo kart. Crea una sala y juega con tus amigos." />
   <link rel="manifest" href="/manifest.webmanifest" />
-  <link rel="stylesheet" href="/css/style.css?v=5" />
+  <link rel="stylesheet" href="/css/style.css?v=9" />
 </head>
 <body>
 
@@ -59,6 +59,7 @@
   STATE: lobby  (room created & active)
 ════════════════════════════════════════════════════════════════════════ -->
 <div id="state-lobby" class="page-state layer" style="flex-direction:column; background:var(--bg);">
+  <span class="screen-build-id" aria-label="Versión b12">b12</span>
 
   <!-- Top banner -->
   <div class="host-banner">
@@ -174,6 +175,8 @@
 
         <!-- Car Info & Stats -->
         <div class="glass car-info-card">
+          <label for="pilot-name-input" class="title-sm" style="font-size:0.7rem;">APODO DEL PILOTO</label>
+          <input id="pilot-name-input" class="input" type="text" maxlength="20" autocomplete="off" placeholder="Piloto 1" style="width:100%; margin:8px 0 14px;" />
           <p id="car-tagline-display" class="text-muted" style="font-size:0.8rem; font-style:italic; margin-bottom:12px;">
             Velocidad punta letal a costa de blindaje
           </p>
@@ -209,6 +212,13 @@
               <div class="stat-bar-track"><div id="stat-weight-bar" class="stat-bar-fill" style="background:#9d4edd; width:45%;"></div></div>
               <span id="stat-weight-val" class="stat-value">45</span>
             </div>
+          </div>
+
+          <div class="loadout-confirmation">
+            <button id="btn-toggle-ready" class="btn-ready" type="button" disabled>
+              🏎️ Confirmar vehículo
+            </button>
+            <p id="ready-status-text" class="text-muted">Elige tu vehículo y apodo.</p>
           </div>
         </div>
       </div>
@@ -251,16 +261,6 @@
               <span id="weapon-detail-diff" class="text-muted font-racing" style="font-size:0.8rem;">Fácil</span>
             </div>
           </div>
-        </div>
-
-        <!-- Ready Button -->
-        <div class="mt-auto flex-col gap-12">
-          <button id="btn-toggle-ready" class="btn-ready">
-            🏎️ Confirmar Vehículo
-          </button>
-          <p id="ready-status-text" class="text-muted" style="font-size:0.75rem; text-align:center;">
-            Pulsa cuando hayas elegido tu vehículo.
-          </p>
         </div>
 
       </div>
@@ -427,6 +427,6 @@
 <script src="/js/fx/itemMeshes.js"></script>
 <script src="/js/threeGameRenderer.js?v=19"></script>
 <script src="/socket.io/socket.io.js"></script>
-<script src="/js/main.js?v=8"></script>
+<script src="/js/main.js?v=10"></script>
 </body>
 </html>

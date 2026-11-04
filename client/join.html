@@ -6,7 +6,7 @@
   <link rel="manifest" href="/manifest.webmanifest" />
   <title>Road Rumble – Unirse a la carrera</title>
   <meta name="description" content="Únete a la sala de Road Rumble y vincula tu celular como control." />
-  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/style.css?v=9" />
 </head>
 <body>
 
@@ -105,6 +105,7 @@
   STATE: linked  (phone connected, Stage 2 Loadout Selection)
 ════════════════════════════════════════════════════════════════════════ -->
 <div id="state-linked" class="page-state layer" style="width:100vw; height:100vh; flex-direction:column;">
+  <span class="screen-build-id" aria-label="Versión b12">b12</span>
 
   <!-- Top banner -->
   <div class="host-banner">
@@ -152,6 +153,8 @@
 
         <!-- Car Info & Stats -->
         <div class="glass car-info-card">
+          <label for="guest-pilot-name-input" class="title-sm" style="font-size:0.7rem;">APODO DEL PILOTO</label>
+          <input id="guest-pilot-name-input" class="input" type="text" maxlength="20" autocomplete="off" placeholder="Piloto 1" style="width:100%; margin:8px 0 14px;" />
           <p id="guest-car-tagline" class="text-muted" style="font-size:0.8rem; font-style:italic; margin-bottom:12px;">
             Velocidad punta letal a costa de blindaje
           </p>
@@ -187,6 +190,13 @@
               <div class="stat-bar-track"><div id="guest-stat-weight-bar" class="stat-bar-fill" style="background:#9d4edd; width:45%;"></div></div>
               <span id="guest-stat-weight-val" class="stat-value">45</span>
             </div>
+          </div>
+
+          <div class="loadout-confirmation">
+            <button id="guest-btn-ready" class="btn-ready" type="button" disabled>
+              🏎️ Confirmar vehículo
+            </button>
+            <p id="guest-ready-status-text" class="text-muted">Elige tu vehículo y apodo.</p>
           </div>
         </div>
       </div>
@@ -231,16 +241,6 @@
           </div>
         </div>
 
-        <!-- Ready Button -->
-        <div class="mt-auto flex-col gap-12">
-          <button id="guest-btn-ready" class="btn-ready">
-            🏎️ Confirmar Vehículo
-          </button>
-          <p id="guest-ready-status-text" class="text-muted" style="font-size:0.75rem; text-align:center;">
-            Pulsa cuando hayas elegido tu vehículo.
-          </p>
-        </div>
-
       </div>
 
     </div>
@@ -280,6 +280,6 @@
 <script src="/js/fx/itemMeshes.js"></script>
 <script src="/js/threeGameRenderer.js?v=18"></script>
 <script src="/socket.io/socket.io.js"></script>
-<script src="/js/player.js?v=2"></script>
+<script src="/js/player.js?v=4"></script>
 </body>
 </html>

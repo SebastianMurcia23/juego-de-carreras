@@ -129,13 +129,13 @@ io.on('connection', (socket) => {
   });
 
   /* ── Link mobile controller to a seat ────────────────────────────────── */
-  socket.on(EV.LINK_SEAT, async ({ seatToken, name } = {}) => {
+  socket.on(EV.LINK_SEAT, async ({ seatToken } = {}) => {
     try {
       if (!seatToken) {
         socket.emit(EV.SEAT_INVALID, { message: 'Token de asiento inválido.' });
         return;
       }
-      const result = await rooms.linkSeat(seatToken, name, id);
+      const result = await rooms.linkSeat(seatToken, null, id);
 
       if (result.error === 'SEAT_ALREADY_USED') {
         socket.emit(EV.SEAT_ALREADY_USED, {
@@ -156,7 +156,7 @@ io.on('connection', (socket) => {
           isReady:   result.isReady,
           roomState: result.roomState,
         });
-        console.log(`[seat] Mobile ${id} linked as "${result.name}" in ${result.roomCode}`);
+        console.log(`[seat] Mobile ${id} linked to ${result.roomCode}`);
       }
     } catch (e) {
       console.error('[link_seat]', e);
@@ -206,6 +206,10 @@ io.on('connection', (socket) => {
           success:     true,
           name:        result.name,
           isHost:      result.isHost,
+          carId:       result.carId,
+          weaponId:    result.weaponId,
+          isReady:     result.isReady,
+          roomState:   result.roomState,
           reconnected: true,
         });
 
@@ -233,6 +237,9 @@ io.on('connection', (socket) => {
           isFinished: Boolean(car?.finished),
           finishPlace: car?.finishPlace || null,
         });
+        if (room?.lastResults && (currentPhase === 'intermision_resultados' || currentPhase === 'podio_final')) {
+          socket.emit(EV.RACE_FINISHED, room.lastResults);
+        }
       }
     } catch (e) {
       console.error('[reconnect_mobile]', e);
@@ -247,7 +254,7 @@ io.on('connection', (socket) => {
   /* ── Stage 2: Loadout selection (car & weapon) ────────────────────────── */
   socket.on(EV.SELECT_LOADOUT, ({ seatToken, carId, weaponId, name } = {}) => {
     try {
-      const res = rooms.selectLoadout(seatToken, carId, weaponId, name);
+      const res = rooms.selectLoadout(seatToken, carId, weaponId, name, id);
       if (res.error) socket.emit(EV.ERROR, { message: res.error });
     } catch (e) {
       console.error('[select_loadout]', e);
@@ -257,7 +264,7 @@ io.on('connection', (socket) => {
   /* ── Stage 2: Toggle Ready state ──────────────────────────────────────── */
   socket.on(EV.TOGGLE_READY, ({ seatToken, isReady, name } = {}) => {
     try {
-      const res = rooms.toggleReady(seatToken, isReady, name);
+      const res = rooms.toggleReady(seatToken, isReady, name, id);
       if (res.error) socket.emit(EV.ERROR, { message: res.error });
     } catch (e) {
       console.error('[toggle_ready]', e);

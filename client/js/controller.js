@@ -3,10 +3,10 @@
  * Logic for the MOBILE CONTROLLER screen (controller.html) - Stage 2
  *
  * Phases:
- *   connecting → name-entry → [permission (iOS)] → mobile-selection → controller
+ *   connecting → mobile-selection (waiting) → controller
  *
  * Features:
- *  - Mobile loadout selection (car, weapon, ready toggle) with canvas preview
+ *  - Waiting state while the screen configures the pilot
  *  - DeviceOrientation for gyro steering (with iOS permission request)
  *  - Fallback steering buttons (◀▶) when gyro is unavailable
  *  - Pointer-event multitouch buttons (ACCEL / BRAKE / FIRE / DRIFT)
@@ -33,7 +33,7 @@ const GYRO = {
 
 /* ─── State ─────────────────────────────────────────────────────────────── */
 const S = {
-  phase:               'connecting', // 'connecting' | 'name-entry' | 'permission' | 'mobile-selection' | 'controller' | 'error'
+  phase:               'connecting', // 'connecting' | 'permission' | 'mobile-selection' | 'controller' | 'error'
   controllerActivated: false,
   socket:              null,
   seatToken:           null,
@@ -74,16 +74,35 @@ const S = {
 /* ─── DOM helpers ────────────────────────────────────────────────────────── */
 const $ = id => document.getElementById(id);
 
+function setControllerView(phase) {
+  const viewport = $('ctrl-viewport');
+  if (!viewport) return;
+  viewport.dataset.phase = phase === 'mobile-selection' ? 'waiting' : phase;
+  S.phase = phase;
+}
+
 function showPhase(name) {
-  const phases = ['connecting', 'name-entry', 'permission', 'mobile-selection', 'controller', 'error'];
-  phases.forEach(p => {
-    const el = $(`state-${p}`) || $(`state-${p.replace('-entry', '')}`);
-    if (el) {
-      el.classList.toggle('hidden', p !== name);
-      el.style.display = (p === name) ? 'flex' : 'none';
-    }
-  });
-  S.phase = name;
+  setControllerView(name);
+}
+
+function getViewportSize() {
+  const source = window.visualViewport;
+  return {
+    width: Math.max(1, Math.round(source?.width || window.innerWidth)),
+    height: Math.max(1, Math.round(source?.height || window.innerHeight)),
+  };
+}
+
+function applyStageLayout() {
+  const viewport = $('ctrl-viewport');
+  const stage = $('ctrl-stage');
+  if (!viewport || !stage) return;
+
+  const { width, height } = getViewportSize();
+  const rotated = width < height;
+  stage.style.setProperty('--stage-w', `${rotated ? height : width}px`);
+  stage.style.setProperty('--stage-h', `${rotated ? width : height}px`);
+  stage.dataset.stage = rotated ? 'rotated' : 'native';
 }
 
 function toast(msg, type = '', duration = 3000) {
@@ -104,6 +123,7 @@ function getSeatToken() {
 function initMobileSelectionUI() {
   const ARCADE = Boolean(window.ROAD_RUMBLE_FLAGS && window.ROAD_RUMBLE_FLAGS.ARCADE_ITEMS !== false);
   $('ctrl-player-label').textContent = S.playerName || 'Piloto';
+  updateWaitingLoadoutLabel();
 
   if (ARCADE) {
     // Hide weapon selection card in mobile UI
@@ -113,10 +133,6 @@ function initMobileSelectionUI() {
 
   const nameInput = $('ctrl-input-nickname');
   if (nameInput) {
-    const savedName = localStorage.getItem('rr_pilot_name') || S.playerName || '';
-    if (!nameInput.value || nameInput.value === 'Piloto') {
-      nameInput.value = savedName;
-    }
     const validate = () => {
       const val = (nameInput.value || '').trim();
       const isValid = val.length >= 1 && val.length <= 20;
@@ -135,12 +151,19 @@ function initMobileSelectionUI() {
   if (!ARCADE) updateMobileWeaponDisplay();
 }
 
+function updateWaitingLoadoutLabel() {
+  const car = CARS[S.selectedCarIndex];
+  const vehicleLabel = $('ctrl-vehicle-label');
+  if (vehicleLabel) vehicleLabel.textContent = `Vehículo: ${car?.name || '—'}`;
+}
+
 function updateMobileCarDisplay() {
   const car = CARS[S.selectedCarIndex];
   if (!car) return;
   const ARCADE = Boolean(window.ROAD_RUMBLE_FLAGS && window.ROAD_RUMBLE_FLAGS.ARCADE_ITEMS !== false);
 
   $('ctrl-car-name').textContent = car.name;
+  updateWaitingLoadoutLabel();
   $('ctrl-car-role').textContent = `${car.role} · ${car.tagline}`;
 
   const canvas = $('ctrl-car-canvas');
@@ -244,7 +267,6 @@ function toggleMobileReady() {
       return;
     }
     S.playerName = name;
-    localStorage.setItem('rr_pilot_name', name);
     $('ctrl-player-label').textContent = name;
     $('hud-name').textContent = name;
 
@@ -253,7 +275,6 @@ function toggleMobileReady() {
     S.isReady = true;
     updateConfirmationUI();
     if (S.socket && S.seatToken) {
-      S.socket.emit(EV.TOGGLE_READY, { seatToken: S.seatToken, isReady: true, name });
     }
     toast('✓ ¡Vehículo confirmado!', 'success', 2000);
   } else {
@@ -266,7 +287,6 @@ function unlockMobileVehicle() {
   S.isReady = false;
   updateConfirmationUI();
   if (S.socket && S.seatToken) {
-    S.socket.emit(EV.TOGGLE_READY, { seatToken: S.seatToken, isReady: false });
   }
   toast('Vehículo desbloqueado. Puedes cambiarlo.', 'info', 1800);
 }
@@ -278,12 +298,6 @@ function syncLoadoutToServer(optName) {
   const ARCADE = Boolean(window.ROAD_RUMBLE_FLAGS && window.ROAD_RUMBLE_FLAGS.ARCADE_ITEMS !== false);
   const name = optName || ($('ctrl-input-nickname')?.value || S.playerName || '').trim();
 
-  S.socket.emit(EV.SELECT_LOADOUT, {
-    seatToken: S.seatToken,
-    carId: car.id,
-    weaponId: ARCADE ? null : S.selectedWeaponId,
-    name: name || undefined,
-  });
 }
 
 /* ─── DeviceOrientation & Motion Gyroscope ───────────────────────────────── */
@@ -294,7 +308,7 @@ function syncLoadoutToServer(optName) {
  * 90° by CSS, so the user holds it sideways like a steering wheel.
  */
 function isUIRotatedPortrait() {
-  return window.innerHeight > window.innerWidth;
+  return $('ctrl-stage')?.dataset.stage === 'rotated';
 }
 
 function getOrientationAngle() {
@@ -446,12 +460,14 @@ function updateSteerVisuals(steerVal, rawDeg, source) {
 async function activateSensorsByUserGesture() {
   console.log('[sensor] activateSensorsByUserGesture called');
 
+  let permissionDenied = false;
   try {
     if (typeof DeviceOrientationEvent !== 'undefined' &&
         typeof DeviceOrientationEvent.requestPermission === 'function') {
       const state = await DeviceOrientationEvent.requestPermission();
       console.log('[sensor] DeviceOrientation permission:', state);
       if (state === 'granted') S.gyroGranted = true;
+      else permissionDenied = true;
     }
   } catch (err) {
     console.warn('[sensor] DeviceOrientation permission error:', err);
@@ -463,6 +479,7 @@ async function activateSensorsByUserGesture() {
       const state = await DeviceMotionEvent.requestPermission();
       console.log('[sensor] DeviceMotion permission:', state);
       if (state === 'granted') S.gyroGranted = true;
+      else permissionDenied = true;
     }
   } catch (err) {
     console.warn('[sensor] DeviceMotion permission error:', err);
@@ -474,8 +491,17 @@ async function activateSensorsByUserGesture() {
 
   const diagEl = $('sensor-diag');
   if (diagEl) {
-    diagEl.textContent = '📡 SENSORES ACTIVADOS. INCLINA EL CELULAR…';
+    diagEl.textContent = permissionDenied
+      ? '⚠️ Sensores denegados. Permite el movimiento en ajustes o usa botones táctiles.'
+      : '📡 SENSORES ACTIVADOS. INCLINA EL CELULAR…';
   }
+  const waitStatus = $('ctrl-wait-status');
+  if (waitStatus) {
+    waitStatus.textContent = permissionDenied
+      ? 'Sensores denegados · usa botones táctiles'
+      : 'Sensores activados ✓ · esperando la carrera';
+  }
+  return !permissionDenied;
 }
 
 function requestGyroPermission() {
@@ -519,19 +545,20 @@ function requestGyroPermission() {
 
 /* ─── Screen lock & WakeLock ─────────────────────────────────────────────── */
 async function tryLockLandscape() {
-  try {
-    if (document.documentElement.requestFullscreen) {
-      await document.documentElement.requestFullscreen().catch(() => {});
-    } else if (document.documentElement.webkitRequestFullscreen) {
-      await document.documentElement.webkitRequestFullscreen().catch(() => {});
+  if (/Android/i.test(navigator.userAgent || '')) {
+    try {
+      if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen().catch(() => {});
+      } else if (document.documentElement.webkitRequestFullscreen) {
+        await document.documentElement.webkitRequestFullscreen().catch(() => {});
+      }
+      if (screen.orientation?.lock) {
+        await screen.orientation.lock('landscape').catch(() => {});
+      }
+    } catch (error) {
+      console.info('[controller] Landscape lock unavailable; using responsive stage.', error);
     }
-  } catch {}
-
-  try {
-    if (screen.orientation?.lock) {
-      await screen.orientation.lock('landscape').catch(() => {});
-    }
-  } catch {}
+  }
 
   try {
     if ('wakeLock' in navigator) {
@@ -682,10 +709,7 @@ function initSocket() {
 
   socket.on('connect', () => {
     console.log('[ctrl] connected', socket.id);
-    const savedName = localStorage.getItem('rr_pilot_name') || 'Piloto';
-
-    // Auto-link immediately with pilot name so the PC recognizes the connected seat right away!
-    socket.emit(EV.LINK_SEAT, { seatToken: S.seatToken, name: savedName });
+    socket.emit(EV.LINK_SEAT, { seatToken: S.seatToken });
 
     // Request gyro sensors if supported
     requestGyroPermission();
@@ -701,7 +725,7 @@ function initSocket() {
   socket.on(EV.SEAT_LINKED, ({ success, name, isHost, carId, weaponId, isReady, roomState }) => {
     if (!success) return;
 
-    S.playerName = name || 'Piloto';
+    S.playerName = name || 'Piloto 1';
     S.isHost     = isHost;
     if (isReady != null) S.isReady = Boolean(isReady);
 
@@ -709,27 +733,26 @@ function initSocket() {
       const idx = CARS.findIndex(c => c.id === carId);
       if (idx !== -1) S.selectedCarIndex = idx;
     }
+    updateWaitingLoadoutLabel();
     if (weaponId) S.selectedWeaponId = weaponId;
 
     localStorage.setItem('rr_ctrl_token', S.seatToken);
-    localStorage.setItem('rr_pilot_name', S.playerName);
     $('reconnect-overlay')?.classList.add('hidden');
     $('hud-name').textContent = S.playerName;
 
     if (roomState === 'racing' || roomState === 'countdown') {
       activateController();
     } else {
-      showPhase('mobile-selection');
-      initMobileSelectionUI();
-      updateConfirmationUI();
+      setControllerView('waiting');
+      $('ctrl-player-label').textContent = S.playerName || 'Esperando configuración…';
+      $('ctrl-wait-status').textContent = isReady
+        ? 'Vehículo confirmado en la pantalla. Esperando la carrera…'
+        : 'Esperando confirmación en la pantalla…';
     }
   });
 
   socket.on(EV.LOADOUT_UPDATED, ({ carId, weaponId, name }) => {
     if (name) {
-      S.playerName = name;
-      localStorage.setItem('rr_pilot_name', name);
-      if ($('ctrl-input-nickname')) $('ctrl-input-nickname').value = name;
       $('ctrl-player-label').textContent = name;
       $('hud-name').textContent = name;
     }
@@ -737,6 +760,7 @@ function initSocket() {
       const idx = CARS.findIndex(c => c.id === carId);
       if (idx !== -1) S.selectedCarIndex = idx;
     }
+    updateWaitingLoadoutLabel();
     if (weaponId) S.selectedWeaponId = weaponId;
     updateMobileCarDisplay();
     updateMobileWeaponDisplay();
@@ -746,12 +770,12 @@ function initSocket() {
     S.isReady = Boolean(isReady);
     if (name) {
       S.playerName = name;
-      localStorage.setItem('rr_pilot_name', name);
-      if ($('ctrl-input-nickname')) $('ctrl-input-nickname').value = name;
       $('ctrl-player-label').textContent = name;
       $('hud-name').textContent = name;
+      $('ctrl-wait-status').textContent = S.isReady
+        ? 'Vehículo confirmado en la pantalla. Esperando la carrera…'
+        : 'Esperando confirmación en la pantalla…';
     }
-    updateConfirmationUI();
   });
 
   socket.on(EV.GAME_STARTING, ({ countdownSeconds }) => {
@@ -883,6 +907,7 @@ function initSocket() {
   function showMobileResults(data) {
     const overlay = $('ctrl-results-overlay');
     if (!overlay) return;
+    setControllerView('results');
     overlay.classList.remove('hidden');
 
     const res = data.results || [];
@@ -1151,7 +1176,7 @@ async function activateController() {
   S.controllerActivated = true;
   applyForcedLandscape();
   await tryLockLandscape();
-  showPhase('controller');
+  setControllerView('cockpit');
   setupTouchButtons();
 
   const ARCADE = Boolean(window.ROAD_RUMBLE_FLAGS && window.ROAD_RUMBLE_FLAGS.ARCADE_ITEMS !== false);
@@ -1186,38 +1211,15 @@ async function activateController() {
 }
 
 function applyForcedLandscape() {
-  const vp = $('ctrl-viewport');
-  if (!vp) return;
-  const w = window.innerWidth;
-  const h = window.innerHeight;
-
-  if (h > w) {
-    // Portrait orientation (or portrait lock on phone):
-    // Auto-rotate 90deg so it ALWAYS displays in full screen horizontal mode!
-    vp.style.position = 'fixed';
-    vp.style.width = `${h}px`;
-    vp.style.height = `${w}px`;
-    vp.style.top = '50%';
-    vp.style.left = '50%';
-    vp.style.transform = 'translate(-50%, -50%) rotate(90deg)';
-    vp.style.transformOrigin = 'center center';
-  } else {
-    // Natural landscape orientation:
-    vp.style.position = 'fixed';
-    vp.style.width = '100vw';
-    vp.style.height = '100vh';
-    vp.style.top = '0';
-    vp.style.left = '0';
-    vp.style.transform = 'none';
-  }
+  applyStageLayout();
 }
 
 /* ─── Wiring ─────────────────────────────────────────────────────────────── */
 function wireButtons() {
-  // Always lock and keep full horizontal view on any resize or orientation change
-  applyForcedLandscape();
-  window.addEventListener('resize', applyForcedLandscape);
-  window.addEventListener('orientationchange', applyForcedLandscape);
+  applyStageLayout();
+  window.addEventListener('resize', applyStageLayout);
+  window.addEventListener('orientationchange', applyStageLayout);
+  window.visualViewport?.addEventListener('resize', applyStageLayout);
 
   // Global user gesture listener to unlock mobile sensors seamlessly
   const tryActivate = () => {
@@ -1245,21 +1247,20 @@ function wireButtons() {
   $('btn-grant-permission')?.addEventListener('click', async () => {
     await requestGyroPermission();
     showPhase('mobile-selection');
-    initMobileSelectionUI();
   });
 
   $('btn-skip-permission')?.addEventListener('click', () => {
     showPhase('mobile-selection');
-    initMobileSelectionUI();
+  });
+
+  $('btn-ctrl-sensors')?.addEventListener('click', activateSensorsByUserGesture);
+  $('btn-ctrl-wait-calibrate')?.addEventListener('click', async () => {
+    await activateSensorsByUserGesture();
+    calibrate();
+    toast('⧖ Volante calibrado', 'success', 1800);
   });
 
   // Mobile loadout controls
-  $('btn-ctrl-car-prev')?.addEventListener('click', () => selectMobileCar(-1));
-  $('btn-ctrl-car-next')?.addEventListener('click', () => selectMobileCar(1));
-  $('btn-ctrl-weapon-prev')?.addEventListener('click', () => selectMobileWeapon(-1));
-  $('btn-ctrl-weapon-next')?.addEventListener('click', () => selectMobileWeapon(1));
-  $('btn-ctrl-ready')?.addEventListener('click', toggleMobileReady);
-  $('btn-ctrl-unlock')?.addEventListener('click', unlockMobileVehicle);
 
   // Invert & Calibrate & Sensitivity
   $('btn-calibrate')?.addEventListener('click', calibrate);
@@ -1270,13 +1271,6 @@ function wireButtons() {
   $('btn-sensitivity')?.addEventListener('click', cycleSensitivity);
 
   // Garage / loadout toggle
-  $('btn-toggle-garage')?.addEventListener('click', () => {
-    showPhase('mobile-selection');
-    initMobileSelectionUI();
-  });
-  $('btn-back-to-ctrl')?.addEventListener('click', () => {
-    activateController();
-  });
 }
 
 /* ─── Init ──────────────────────────────────────────────────────────────── */

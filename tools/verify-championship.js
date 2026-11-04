@@ -426,6 +426,36 @@ async function runComprehensiveChampionshipVerification() {
   // Link mobile phone
   const linkRes = await rm.linkSeat(seatToken, 'PhonePlayer', 'guest-phone-sock');
   assert.strictEqual(linkRes.success, true);
+  assert.strictEqual(linkRes.name, null, 'Mobile linking must not set the pilot name');
+
+  const mobileLoadoutAttempt = rm.selectLoadout(
+    seatToken, 'apex_venom', null, 'Phone Hacked', 'guest-phone-sock'
+  );
+  assert.strictEqual(mobileLoadoutAttempt.error, 'UNAUTHORIZED', 'Mobile must not change loadout');
+  const mobileReadyAttempt = rm.toggleReady(
+    seatToken, true, 'Phone Hacked', 'guest-phone-sock'
+  );
+  assert.strictEqual(mobileReadyAttempt.error, 'UNAUTHORIZED', 'Mobile must not toggle ready');
+
+  const screenLoadout = rm.selectLoadout(
+    seatToken, 'apex_venom', null, '  Screen Pilot <b>  ', 'guest-screen-sock'
+  );
+  assert.strictEqual(screenLoadout.success, true);
+  assert.strictEqual(screenLoadout.name, 'Screen Pilot b', 'Screen name must be trimmed and stripped of HTML');
+  assert.strictEqual(screenLoadout.name.length <= 20, true);
+  const screenReady = rm.toggleReady(
+    seatToken, true, screenLoadout.name, 'guest-screen-sock'
+  );
+  assert.strictEqual(screenReady.success, true, 'Screen must be able to confirm');
+  const screenUnready = rm.toggleReady(
+    seatToken, false, screenLoadout.name, 'guest-screen-sock'
+  );
+  assert.strictEqual(screenUnready.success, true, 'Screen must be able to unconfirm');
+  assert.strictEqual(screenUnready.isReady, false, 'Unconfirm must clear ready state');
+  const screenReadyAgain = rm.toggleReady(
+    seatToken, true, screenLoadout.name, 'guest-screen-sock'
+  );
+  assert.strictEqual(screenReadyAgain.success, true, 'Screen must confirm again after editing');
 
   // Set championship mode with 3 tracks
   rm.updateRoomSettings(roomCode, hostToken, {

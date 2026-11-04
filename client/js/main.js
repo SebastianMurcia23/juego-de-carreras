@@ -18,6 +18,7 @@ var S = {
   selectedCarIndex: 0,
   selectedWeaponId: 'vulcan_mg',
   isReady:          false,
+  readyPending:     false,
   previewAnim:      null,
   settings: {
     mode:             'championship',
@@ -342,17 +343,18 @@ function initSocket() {
 
   S.socket.on('ready_state_changed', function(data) {
     S.isReady = Boolean(data.isReady);
-    var btn = $('btn-toggle-ready');
-    if (btn) {
-      if (S.isReady) { btn.classList.add('is-ready'); btn.textContent = 'LISTO PARA CORRER'; }
-      else { btn.classList.remove('is-ready'); btn.textContent = 'LISTO PARA CORRER'; }
-    }
+    S.readyPending = false;
+    updateReadyButton();
+    toast(S.isReady ? '✓ Vehículo confirmado para la carrera' : 'Vehículo desbloqueado para cambios',
+      S.isReady ? 'success' : 'info', 2000);
   });
 
   S.socket.on(EV.ERROR, function(data) {
     if (_createTimeout) { clearTimeout(_createTimeout); _createTimeout = null; }
     console.error('[socket] server error:', data ? data.message : 'unknown');
     toast((data && data.message) || 'Error del servidor', 'error');
+    S.readyPending = false;
+    updateReadyButton();
     if (S.phase === 'creating') {
       showState('landing');
       var b = $('btn-create');
@@ -451,6 +453,8 @@ window.enterLobby = function(data) {
       if (idx !== -1) S.selectedCarIndex = idx;
     }
     if (data.weaponId) S.selectedWeaponId = data.weaponId;
+    var pilotInput = $('pilot-name-input');
+    if (pilotInput) pilotInput.value = data.playerName || localStorage.getItem('rr_pilot_name') || 'Piloto 1';
 
     var origin = window.location.origin;
     S.ctrlUrl = data.controlUrl || (origin + '/control/' + data.seatToken);
@@ -506,6 +510,7 @@ function showLinkedState(name) {
   hideEl('host-qr-section');
   showEl('host-loadout-section');
   try { initLoadoutUI(); } catch(e) {}
+  syncLoadoutToServer();
   if (name) toast('\uD83C\uDFCE\uFE0F ¡Conectado como piloto: "' + name + '"!', 'success');
 }
 
@@ -570,7 +575,12 @@ function initLoadoutUI() {
   var ARCADE = (window.ROAD_RUMBLE_FLAGS && window.ROAD_RUMBLE_FLAGS.ARCADE_ITEMS !== false);
   if (ARCADE) {
     var ws = document.querySelector('.weapons-showcase');
-    if (ws) ws.style.display = 'none';
+    if (ws) {
+      var arcadeGrid = ws.querySelector('#weapons-grid');
+      var arcadeDetails = ws.querySelector('.weapon-details-card');
+      if (arcadeGrid) arcadeGrid.style.display = 'none';
+      if (arcadeDetails) arcadeDetails.style.display = 'none';
+    }
     var lc = document.querySelector('.loadout-container');
     if (lc) { lc.style.gridTemplateColumns = '1fr'; lc.style.maxWidth = '640px'; }
     var hint = $('ready-status-text');
@@ -624,6 +634,7 @@ function initLoadoutUI() {
   }
   updateCarDisplay();
   if (!ARCADE) updateWeaponDetails();
+  updateReadyButton();
 }
 
 function selectCar(index) {
@@ -662,6 +673,35 @@ function updateCarDisplay() {
   setStatBar('stat-drift',    car.stats.drift);
   setStatBar('stat-armor',    car.stats.armor);
   setStatBar('stat-weight',   car.stats.weight);
+  updateReadyButton();
+}
+
+function isPilotNameValid() {
+  var input = $('pilot-name-input');
+  var value = input ? input.value.trim() : getPilotName();
+  return value.length >= 1 && value.length <= 20;
+}
+
+function updateReadyButton() {
+  var btn = $('btn-toggle-ready');
+  if (!btn) return;
+  var valid = isPilotNameValid() && CARS.length > 0;
+  var input = $('pilot-name-input');
+  if (input) input.disabled = S.isReady || S.readyPending;
+  btn.disabled = S.readyPending || (!S.isReady && !valid);
+  if (S.readyPending) {
+    btn.textContent = '⏳ Guardando…';
+  } else if (S.isReady) {
+    btn.textContent = '✓ Confirmado · Cambiar';
+    btn.classList.add('is-ready');
+  } else {
+    btn.textContent = valid ? '🏎️ Confirmar vehículo' : 'Elige tu vehículo';
+    btn.classList.remove('is-ready');
+  }
+  var hint = $('ready-status-text');
+  if (hint && !S.readyPending && !S.isReady && !valid) {
+    hint.textContent = 'Elige tu vehículo y apodo.';
+  }
 }
 
 function setStatBar(prefix, val) {
@@ -695,44 +735,41 @@ function syncLoadoutToServer() {
   S.socket.emit(EV.SELECT_LOADOUT, {
     seatToken: S.seatToken,
     carId: car.id,
-    weaponId: ARCADE ? null : S.selectedWeaponId
+    weaponId: ARCADE ? null : S.selectedWeaponId,
+    name: getPilotName()
   });
+  persistPilotName(getPilotName());
 }
 
 function toggleReady() {
-  S.isReady = !S.isReady;
-  var btn  = $('btn-toggle-ready');
-  var hint = $('ready-status-text');
-  var prevBtn = $('btn-car-prev');
-  var nextBtn = $('btn-car-next');
-  var ARCADE = (window.ROAD_RUMBLE_FLAGS && window.ROAD_RUMBLE_FLAGS.ARCADE_ITEMS !== false);
-
-  if (S.isReady) {
-    if (btn) {
-      btn.classList.add('is-ready');
-      btn.textContent = '✓ Vehículo Confirmado (Cambiar)';
-      btn.style.background = '#00f5d4';
-      btn.style.color = '#000';
-    }
-    if (prevBtn) { prevBtn.disabled = true; prevBtn.style.opacity = '0.35'; prevBtn.style.pointerEvents = 'none'; }
-    if (nextBtn) { nextBtn.disabled = true; nextBtn.style.opacity = '0.35'; nextBtn.style.pointerEvents = 'none'; }
-    if (hint) hint.textContent = '¡Vehículo confirmado! Esperando a los demás pilotos...';
-    toast('✓ Vehículo confirmado para la carrera', 'success', 2000);
-  } else {
-    if (btn) {
-      btn.classList.remove('is-ready');
-      btn.textContent = '🏎️ Confirmar Vehículo';
-      btn.style.background = '';
-      btn.style.color = '';
-    }
-    if (prevBtn) { prevBtn.disabled = false; prevBtn.style.opacity = ''; prevBtn.style.pointerEvents = ''; }
-    if (nextBtn) { nextBtn.disabled = false; nextBtn.style.opacity = ''; nextBtn.style.pointerEvents = ''; }
-    if (hint) hint.textContent = ARCADE ? 'Pulsa para confirmar tu vehículo.' : 'Pulsa cuando hayas definido tu carro y arma.';
-    toast('Vehículo desbloqueado para cambios', 'info', 2000);
+  var pilotName = getPilotName();
+  if (!isPilotNameValid()) {
+    toast('Escribe un apodo para confirmar el vehículo', 'error');
+    return;
   }
-
+  var nextReady = !S.isReady;
+  S.readyPending = true;
+  updateReadyButton();
   if (S.socket && S.seatToken) {
-    S.socket.emit(EV.TOGGLE_READY, { seatToken: S.seatToken, isReady: S.isReady });
+    S.socket.emit(EV.TOGGLE_READY, { seatToken: S.seatToken, isReady: nextReady, name: pilotName });
+    persistPilotName(pilotName);
+  }
+}
+
+function getPilotName() {
+  var input = $('pilot-name-input');
+  return ((input && input.value) || localStorage.getItem('rr_pilot_name') || 'Piloto 1').trim().slice(0, 20);
+}
+
+function persistPilotName(name) {
+  var safeName = (name || '').trim().slice(0, 20) || 'Piloto 1';
+  localStorage.setItem('rr_pilot_name', safeName);
+  if (window.ROAD_RUMBLE_PRODUCT && window.ROAD_RUMBLE_PRODUCT.profileId) {
+    fetch('/api/product/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: window.ROAD_RUMBLE_PRODUCT.profileId(), name: safeName })
+    }).catch(function(err) { console.error('[profile] name update failed', err); });
   }
 }
 
@@ -957,6 +994,8 @@ function wireButtons() {
 
   var btnReady = $('btn-toggle-ready');
   if (btnReady) btnReady.addEventListener('click', toggleReady);
+  var pilotInput = $('pilot-name-input');
+  if (pilotInput) pilotInput.addEventListener('input', updateReadyButton);
 
   var selMode   = $('admin-select-mode');     if (selMode)   selMode.addEventListener('change',   updateAdminSettings);
   var selTCount = $('admin-select-trackcount');if (selTCount) selTCount.addEventListener('change',  updateAdminSettings);

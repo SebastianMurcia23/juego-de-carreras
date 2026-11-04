@@ -222,6 +222,7 @@ class RoomManager {
       controlUrl,
       settings: room.settings,
       config: this.getConfigCatalog(),
+      roomState: room.state,
     };
   }
 
@@ -282,8 +283,9 @@ class RoomManager {
   /* ── Resolve Unique Seat Nickname ────────────────────────────────────── */
 
   _resolveUniqueName(room, requestedName, currentSeatToken) {
-    let base = (requestedName || '').trim().replace(/<[^>]*>/g, '').slice(0, LIMITS.MAX_NAME_LENGTH);
-    if (!base) base = 'Piloto';
+    let base = (typeof requestedName === 'string' ? requestedName : '')
+      .trim().replace(/[<>]/g, '').slice(0, LIMITS.MAX_NAME_LENGTH);
+    if (!base) base = 'Piloto 1';
 
     let name = base;
     let counter = 2;
@@ -297,7 +299,7 @@ class RoomManager {
     };
 
     while (isTaken(name)) {
-      name = `${base} (${counter})`;
+      name = `${base} (${counter})`.slice(0, LIMITS.MAX_NAME_LENGTH);
       counter++;
     }
     return name;
@@ -305,7 +307,7 @@ class RoomManager {
 
   /* ── Link mobile to seat ─────────────────────────────────────────────── */
 
-  async linkSeat(seatToken, rawName, mobileSocketId) {
+  async linkSeat(seatToken, _rawName, mobileSocketId) {
     const roomCode = this.seatIndex.get(seatToken);
     if (!roomCode) return { error: 'SEAT_INVALID' };
 
@@ -321,10 +323,7 @@ class RoomManager {
       if (existing) return { error: 'SEAT_ALREADY_USED' };
     }
 
-    const name = this._resolveUniqueName(room, rawName, seatToken);
-
     seat.mobileSocketId = mobileSocketId;
-    seat.name           = name;
     seat.state          = STATES.SEAT.SELECTING;
 
     this.socketIndex.set(mobileSocketId, { roomCode, seatToken, role: 'mobile' });
@@ -333,7 +332,7 @@ class RoomManager {
     // Notify the computer screen of this specific seat
     if (seat.computerSocketId) {
       this.io.to(seat.computerSocketId).emit(EV.SEAT_LINKED, {
-        name,
+        name: seat.name,
         seatToken,
         isHost: seat.isHost,
         carId: seat.carId,
@@ -345,7 +344,7 @@ class RoomManager {
     this._broadcastPlayers(roomCode);
     return {
       success: true,
-      name,
+      name: seat.name,
       roomCode,
       isHost: seat.isHost,
       carId: seat.carId,
@@ -359,7 +358,7 @@ class RoomManager {
 
   /* ── Stage 2: Select Loadout (car & weapon) ─────────────────────────── */
 
-  selectLoadout(seatToken, carId, weaponId, rawName) {
+  selectLoadout(seatToken, carId, weaponId, rawName, requesterSocketId) {
     const roomCode = this.seatIndex.get(seatToken);
     if (!roomCode) return { error: 'SEAT_INVALID' };
 
@@ -368,6 +367,9 @@ class RoomManager {
 
     const seat = room.seats.get(seatToken);
     if (!seat) return { error: 'SEAT_INVALID' };
+    if (requesterSocketId !== seat.computerSocketId) {
+      return { error: 'UNAUTHORIZED' };
+    }
 
     // If vehicle is already confirmed, lock changes until unlocked
     if (seat.isReady) {
@@ -381,9 +383,7 @@ class RoomManager {
     if (weaponId && WEAPONS.some(w => w.id === weaponId)) {
       seat.weaponId = weaponId;
     }
-    if (rawName && typeof rawName === 'string') {
-      seat.name = this._resolveUniqueName(room, rawName, seatToken);
-    }
+    seat.name = this._resolveUniqueName(room, rawName, seatToken);
 
     // Notify whole room of player update
     this._broadcastPlayers(roomCode);
@@ -409,7 +409,7 @@ class RoomManager {
 
   /* ── Stage 2: Toggle Ready ───────────────────────────────────────────── */
 
-  toggleReady(seatToken, isReady, rawName) {
+  toggleReady(seatToken, isReady, rawName, requesterSocketId) {
     const roomCode = this.seatIndex.get(seatToken);
     if (!roomCode) return { error: 'SEAT_INVALID' };
 
@@ -418,15 +418,16 @@ class RoomManager {
 
     const seat = room.seats.get(seatToken);
     if (!seat) return { error: 'SEAT_INVALID' };
+    if (requesterSocketId !== seat.computerSocketId) {
+      return { error: 'UNAUTHORIZED' };
+    }
 
     // Validate car exists
     if (!seat.carId || !CARS.some(c => c.id === seat.carId)) {
       seat.carId = CARS[0]?.id || 'apex_venom';
     }
 
-    if (rawName && typeof rawName === 'string') {
-      seat.name = this._resolveUniqueName(room, rawName, seatToken);
-    }
+    seat.name = this._resolveUniqueName(room, rawName || seat.name, seatToken);
 
     seat.isReady = Boolean(isReady);
     seat.state = seat.isReady ? STATES.SEAT.READY : STATES.SEAT.SELECTING;
@@ -595,6 +596,7 @@ class RoomManager {
   _handleRaceFinished(roomCode, payload) {
     const room = this.rooms.get(roomCode);
     if (!room) return;
+    room.lastResults = payload;
 
     if (room.settings.mode === 'championship') {
       if (payload.championshipFinished) {
@@ -822,7 +824,7 @@ class RoomManager {
     if (!room) return { error: 'ROOM_NOT_FOUND' };
 
     const seat = room.seats.get(seatToken);
-    if (!seat || !seat.name) return { error: 'SEAT_NOT_LINKED' };
+    if (!seat || seat.state === STATES.SEAT.QR) return { error: 'SEAT_NOT_LINKED' };
 
     seat.mobileSocketId = newMobileSocketId;
     this.socketIndex.set(newMobileSocketId, { roomCode, seatToken, role: 'mobile' });

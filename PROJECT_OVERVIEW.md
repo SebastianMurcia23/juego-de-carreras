@@ -7,7 +7,8 @@ principal es usar el computador o una pantalla grande para mostrar la carrera
 y usar el celular como volante y control de cada jugador.
 
 La aplicación está construida con Node.js, Express, Socket.IO, HTML, CSS y
-JavaScript del lado del cliente. El servidor mantiene la autoridad sobre las
+JavaScript del lado del cliente. La pantalla gestiona apodo, vehículo, arma
+clásica y listo; el celular es únicamente el mando. El servidor mantiene la autoridad sobre las
 salas, la física, las colisiones, el daño, las vueltas, los resultados y la
 puntuación.
 
@@ -18,7 +19,8 @@ Actualmente el proyecto incluye:
 - Un computador o pantalla por jugador.
 - Un celular vinculado como control mediante un código QR.
 - Reconexión de anfitrión, pantalla y celular.
-- Selección de carro y arma (modo clásico) o karts F1 con poderes arcade (modo `ARCADE_ITEMS`).
+- Configuración de apodo y vehículo en pantalla (y arma en modo clásico) o
+  karts F1 con poderes arcade (modo `ARCADE_ITEMS`).
 - Modo Arcade de Fórmula 1 estilo Mario Kart (activo por defecto con `ARCADE_ITEMS: true`): 6 poderes (`turbo`, `disco`, `misil`, `aceite`, `invencibilidad`, `tinta`), cajas de ítems arcoíris ("?"), ruleta autoritativa, probabilidades dinámicas según posición, sin armas letales ni barras de salud.
 - Lobby con estados de selección y listo.
 - Configuración de carrera única o campeonato.
@@ -152,29 +154,39 @@ la modalidad, la pista, las vueltas, la munición y el fuego amigo.
 
 El anfitrión recibe un QR para vincular su propio celular y también un enlace
 de invitación para que otros jugadores abran la sala en sus computadores.
+Cuando el celular queda vinculado, esta pantalla muestra el apodo, el selector
+de vehículo (y el arma en modo clásico) y el botón `🏎️ Confirmar vehículo`.
+Solo esta pantalla puede confirmar o desconfirmar el asiento.
 
 ### 4.2 Pantalla de invitado
 
 `/join/:code` permite que otro computador se una a una sala existente. Ese
 computador recibe su propio asiento, su QR y su enlace de control. Cuando el
 celular escanea el QR, la pantalla del jugador deja de esperar y pasa a la
-selección de carro y arma.
+configuración de apodo, carro y arma (o poderes arcade). El botón de
+confirmación permanece visible junto al selector, con estados deshabilitado,
+`🏎️ Confirmar vehículo` y `✓ Confirmado · Cambiar`. La pantalla conserva el
+apodo en `localStorage` y lo sincroniza con el perfil.
 
 ### 4.3 Control del celular
 
 `/control/:token` es la interfaz móvil. Incluye:
 
-- Entrada del nombre del piloto.
-- Selección de carro y arma.
-- Botón para marcarse como listo.
-- Control de aceleración, freno, disparo y derrape.
+- Estado de espera de configuración en modo solo lectura.
+- Control de aceleración, freno, disparo (modo clásico) y derrape.
 - Dirección mediante giroscopio o inclinación del dispositivo.
-- Calibración del centro del giroscopio.
+- Activación y calibración del centro del giroscopio antes de la carrera.
 - Botón de restauración o respawn cuando el vehículo queda atascado.
 - Reintento de conexión y recuperación del token guardado.
 
-El nombre y el token del control se guardan en `localStorage` para facilitar
-la reconexión.
+El celular solo guarda el token de control en `localStorage`; el apodo no se
+guarda ni se configura allí.
+
+El control usa un único escenario lógico horizontal (`#ctrl-stage`). En un
+viewport vertical el escenario intercambia sus dimensiones, se centra y rota
+90 grados; en horizontal se muestra nativo. Dentro del escenario no se deben
+usar `vh`, `vw`, `dvh`, `dvw` ni media queries de viewport/orientación: el
+tamaño debe depender de `--stage-w`, `--stage-h` o de unidades de container.
 
 ### 4.4 Pantalla de carrera
 
@@ -192,6 +204,10 @@ Existe un renderizador Canvas en `gameRenderer.js` y un renderizador 3D basado
 en Three.js en `threeGameRenderer.js`. Si Three.js no está disponible, el
 cliente conserva el renderizador Canvas como alternativa.
 
+La pantalla gestiona apodo, vehículo, arma clásica y confirmación de listo.
+El celular permanece como mando durante la carrera y conserva su overlay de
+resultados y el botón de siguiente pista del anfitrión.
+
 ## 5. Flujo completo de una partida
 
 1. El anfitrión crea una sala.
@@ -199,10 +215,11 @@ cliente conserva el renderizador Canvas como alternativa.
    un token de asiento.
 3. El servidor genera un QR con la URL del control móvil.
 4. Cada invitado abre `/join/:code` y recibe su propio asiento y QR.
-5. Cada celular se vincula mediante `LINK_SEAT` y proporciona el nombre del
-   piloto.
-6. Los jugadores seleccionan carro y arma.
-7. Cada jugador marca su asiento como listo.
+5. Cada celular se vincula mediante `LINK_SEAT` sin proporcionar nombre ni
+   configuración y muestra la espera y calibración de sensores.
+6. La pantalla define el apodo, carro y, en modo clásico, arma.
+7. La pantalla confirma el vehículo; el servidor valida y marca el asiento
+   listo, mientras el celular solo refleja el estado.
 8. El anfitrión ajusta la configuración y pulsa iniciar.
 9. `GameRoom` genera la pista y comienza una cuenta regresiva de tres
    segundos.
@@ -246,6 +263,10 @@ Administra el estado de las salas en memoria:
 - Reconexiones.
 - Transferencia del anfitrión.
 - Creación de `GameRoom`.
+- Validación de apodo (recorte, máximo 20, sin `<`/`>` y default `Piloto 1`).
+- Autorización de lobby: solo la pantalla dueña del asiento puede cambiar
+  loadout o listo; el celular recibe rechazo.
+- Conservación de loadout, apodo, listo y fase durante reconexiones.
 
 Si el anfitrión se desconecta, existe una ventana de 60 segundos para
 reconectarse. Si no vuelve, el servidor puede transferir el rol al jugador
@@ -567,6 +588,10 @@ Los nombres compartidos están centralizados en `shared/constants.js`.
 - `seat_already_used`
 - `seat_invalid`
 
+`link_seat` solo puede ser emitido por el celular y únicamente vincula el
+token; no acepta ni asigna apodo. `select_loadout` y `toggle_ready` solo
+pueden ser emitidos por la pantalla dueña del asiento.
+
 ### Reconexión
 
 - `reconnect_host`
@@ -582,9 +607,9 @@ Los nombres compartidos están centralizados en `shared/constants.js`.
 
 - `get_config`
 - `config_data`
-- `select_loadout`
-- `loadout_updated`
-- `toggle_ready`
+- `select_loadout` (solo pantalla dueña del asiento)
+- `loadout_updated` (servidor → pantalla y celular)
+- `toggle_ready` (solo pantalla dueña del asiento)
 - `update_settings`
 - `settings_updated`
 - `kick_player`
@@ -614,6 +639,7 @@ Los nombres compartidos están centralizados en `shared/constants.js`.
 - Máximo: 12 jugadores.
 - Código: 4 letras.
 - Nombre máximo: 20 caracteres.
+- Nombre vacío: `Piloto 1`; se eliminan caracteres HTML básicos.
 - Tiempo para reconectar al anfitrión: 60 segundos.
 
 ### Física
@@ -643,7 +669,12 @@ aplicación y usa la red primero con fallback a caché.
 
 La interfaz está concentrada en `client/css/style.css`, con una estética
 futurista y controles adaptados a pantallas móviles. La vista del control
-intenta mantener la orientación horizontal del teléfono.
+usa un shell físico que cubre el viewport y un `#ctrl-stage` lógico horizontal.
+`controller.js` mide `visualViewport` (con fallback a `innerWidth`/`innerHeight`)
+en carga, resize, cambio de orientación y resize del viewport visual. El stage
+se dimensiona con `--stage-w`/`--stage-h`, se rota y centra en vertical, y sus
+estilos usan únicamente porcentajes, `cqw`/`cqh` y safe areas permutadas.
+Esta regla debe mantenerse para futuros cambios del control.
 
 `productHub.js` añade el panel de garaje, temporada y ranking. Algunas acciones
 de personalización visual muestran que el editor 3D llegará en una versión
@@ -658,7 +689,8 @@ Según la funcionalidad presente en el código:
 | Servidor Express y archivos estáticos | Implementado |
 | Salas, códigos, QR y vinculación móvil | Implementado |
 | Reconexión y transferencia de anfitrión | Implementado |
-| Selección de carro y arma | Implementado |
+| Selección de apodo, carro y arma en pantalla | Implementado |
+| Celular solo control y calibración previa | Implementado |
 | Lobby, listo y administración | Implementado |
 | Física autoritativa del servidor | Implementado |
 | Derrape, terrenos y tracción | Implementado |
@@ -845,8 +877,8 @@ El renderizador 3D en `client/js/threeGameRenderer.js` replica con precisión el
 | Puntuación | `config/scoring.js` |
 | Cosméticos y temporada | `config/product.js` |
 | Lógica del anfitrión | `client/js/main.js` |
-| Lógica del jugador | `client/js/player.js` |
-| Control móvil y vibración háptica | `client/js/controller.js` |
+| Lógica del jugador y loadout en pantalla | `client/js/player.js` |
+| Control móvil, espera y vibración háptica | `client/js/controller.js` |
 | Render Canvas (2D) | `client/js/gameRenderer.js` |
 | Render Three.js (3D, karts, cámara y HUD) | `client/js/threeGameRenderer.js` |
 | Partículas visuales (pool sin asignación) | `client/js/fx/particles.js` |
@@ -905,3 +937,143 @@ El renderizador 3D en `client/js/threeGameRenderer.js` replica con precisión el
 - El countdown usa `setInterval` real de 1 s; en escenarios de alta carga el intervalo puede derivar. Para evitar arrastre de tiempo, se podría usar `Date.now()` como referencia.
 - La función `drawResultsOverlay` del overlay en canvas 2D asume `ctx` global; si el renderizador cambia a 3D puro en una versión futura, deberá migrarse al HUD Three.js.
 
+### Tarea 9: Celular solo control
+
+**Objetivo:** mover apodo, vehículo, arma clásica y confirmación de listo a la
+pantalla, dejando el celular exclusivamente como mando.
+
+**Cambios realizados:**
+
+| Archivo | Cambio |
+|---|---|
+| `server/RoomManager.js`, `server/index.js` | Vinculación sin nombre, validación de apodo, autorización de lobby por socket de pantalla y sincronización de reconexión. |
+| `client/index.html`, `client/join.html`, `client/js/main.js`, `client/js/player.js` | Apodo, loadout y listo en pantalla; persistencia en `localStorage` y perfil. |
+| `client/controller.html`, `client/js/controller.js` | Espera solo lectura, activación/calibración de giroscopio y conservación de controles/resultados. |
+| `client/service-worker.js` | Cache buster del shell y clientes modificados. |
+| `tools/verify-championship.js` | Pruebas de vínculo sin nombre, validación y permisos móvil/pantalla. |
+
+**Decisiones tomadas:** el default es `Piloto 1`; el token es el único dato
+persistido en el celular. No se tocaron física, colisiones, pistas, objetos ni
+puntuación.
+
+**Resultado:** se mantienen los estados `Esperando QR`, `Eligiendo`,
+`Confirmado ✓` y `Desconectado`, además de campeonato, resultados y ambos modos.
+
+**Verificación:** `npm test` pasa con 40/40 pistas, 40/40 bots y campeonato
+completo.
+
+**Riesgos / pendientes:** los perfiles siguen siendo en memoria. El flujo
+visual del control se verificó posteriormente en Chromium emulado, incluyendo
+los tamaños verticales y horizontales de la Tarea 11.
+
+### Tarea 10: Corrección visual del control
+
+**Objetivo:** evitar que la espera del control móvil se superponga al cockpit
+y asegurar que el cockpit no desborde horizontalmente.
+
+**Causa raíz:** `.ctrl-cockpit` imponía `display:flex !important` mientras la
+espera se ocultaba mediante cambios de `display` independientes. Ambos bloques
+podían quedar visibles; además, el botón arcade de poder se encogía en pantallas
+angostas.
+
+**Archivos modificados:**
+
+| Archivo | Cambio |
+|---|---|
+| `client/controller.html` | Vista de espera compacta en dos columnas, cierre correcto del overlay de reconexión, cache busters actualizados. |
+| `client/js/controller.js` | Nueva selección exclusiva mediante `data-phase`: `waiting`, `cockpit`, `results`, `connecting` y `error`. |
+| `client/css/style.css` | Reglas propias del control para aislar fases, espera horizontal compacta, safe areas y botón `PODER` sin recorte. |
+| `client/service-worker.js` | Cache del shell actualizado a `v3`. |
+
+**Resultado de capturas:** se verificaron espera, countdown/cockpit, carrera y
+resultados únicamente en emulación horizontal de `667x375`, `844x390` y
+`932x430`. El caso vertical con escenario rotado no estaba cubierto y se
+resolvió en la Tarea 11.
+La espera mostró únicamente su bloque y ambos botones; cockpit y resultados
+mantuvieron `overflow-x: false`. El botón `PODER / PASAR CAJA` quedó dentro del
+viewport en los tres tamaños.
+
+**Compatibilidad:** no se modificaron servidor, física, eventos Socket.IO ni
+las reglas visuales de las pantallas anfitrión/invitado. El cockpit de carrera
+conserva sus controles y comportamiento previos.
+
+### Tarea 11: Control responsive iOS/Android
+
+**Objetivo:** hacer que el control funcione sin recortes en teléfonos
+verticales con bloqueo de rotación y en horizontal nativo.
+
+**Causa raíz confirmada:** la Tarea 10 dimensionaba y rotaba
+`#ctrl-viewport` con `100dvh`/`100dvw` y media queries de orientación. El
+contenido interno seguía usando `vh`/`vw`, que se evaluaban contra el viewport
+físico vertical y no contra el escenario rotado. Por eso la espera podía quedar
+reducida a una fracción de la pantalla en un iPhone real.
+
+**Arquitectura y archivos modificados:**
+
+| Archivo | Cambio |
+|---|---|
+| `client/controller.html` | Meta viewport con `viewport-fit=cover`, `#ctrl-stage`, marcador de build `b11`, vehículo de solo lectura y cache busters `v8`/`v16`. |
+| `client/js/controller.js` | Medición con `visualViewport`, cálculo `data-stage="rotated|native"`, variables `--stage-w`/`--stage-h`, listeners de resize/orientación y bloqueo landscape opcional solo en Android. |
+| `client/css/style.css` | Shell físico separado del stage lógico, container queries `cqw`/`cqh`, layout por fase, safe areas permutadas y eliminación de unidades/media queries de viewport dentro del control. |
+| `client/service-worker.js` | Shell actualizado a `road-rumble-shell-v4` y nuevos recursos del control. |
+| `tools/verify-controller-layout.js` | Verificación estática de stage, meta viewport, unidades prohibidas, marcador y caché; disponible como `npm run test:layout`. |
+| `package.json` | `npm test` incluye la verificación estática y se añade `test:layout`. |
+
+**Sensores:** el mapeo de `DeviceMotion` conserva el comportamiento anterior:
+en stage rotado usa el eje lateral `gy` y en nativo usa `gx` corregido por
+`screen.orientation.angle`; `DeviceOrientation` sigue usando `gamma`. El botón
+`INVERTIR` continúa invirtiendo únicamente el signo final del volante. El
+botón de espera solicita permiso desde el gesto del usuario, actualiza
+`Sensores activados ✓` y muestra instrucciones explícitas si iOS deniega el
+permiso. Android intenta fullscreen y `screen.orientation.lock('landscape')`
+sin impedir el fallback al stage si no están disponibles.
+
+**Matriz Playwright:** se comprobaron 50 combinaciones (10 viewports × 5
+fases: `waiting`, `cockpit/countdown`, `results`, `connecting`, `error`):
+
+| Orientación | Viewports | Resultado |
+|---|---|---|
+| Vertical rotado | `375x667`, `390x844`, `430x932`, `360x800`, `412x915` | 25/25 sin overflow, recortes ni solapamientos |
+| Horizontal nativo | `667x375`, `844x390`, `932x430`, `800x360`, `915x412` | 25/25 sin overflow, recortes ni solapamientos |
+
+Las capturas representativas de espera, cockpit y resultados confirmaron el
+marcador `b11`, el botón de giroscopio tocable y el cockpit completo. La
+prueba se realizó en Chromium emulado; no sustituye una comprobación física de
+Safari iOS/Chrome iOS ni sensores reales. `npm test` queda en verde.
+
+### Tarea 12: Botón de confirmar vehículo
+
+**Objetivo:** hacer visible y funcional la confirmación de loadout únicamente
+en las pantallas de anfitrión e invitado.
+
+**Causa raíz:** en modo arcade `initLoadoutUI()` e
+`initGuestLoadoutUI()` ocultaban todo `.weapons-showcase`. El botón estaba
+dentro de ese contenedor junto con las armas, por lo que desaparecía aunque la
+pantalla necesitara confirmar el vehículo.
+
+**Archivos modificados:**
+
+| Archivo | Cambio |
+|---|---|
+| `client/index.html`, `client/join.html` | Botón movido al panel del vehículo, marcador `b12` y cache busters nuevos. |
+| `client/js/main.js`, `client/js/player.js` | Estados deshabilitado, confirmación, desconfirmación y guardado; selectores y apodo se bloquean al confirmar y se desbloquean al cambiar. |
+| `client/css/style.css` | Layout y feedback visual del bloque de confirmación. |
+| `client/service-worker.js` | Shell `v5` y recursos de pantalla actualizados. |
+| `tools/verify-championship.js`, `tools/verify-controller-layout.js` | Cobertura de desconfirmación y sincronización de la versión del cache. |
+
+**Estados:** sin apodo válido se muestra `Elige tu vehículo`; con selección
+válida `🏎️ Confirmar vehículo`; durante la respuesta `⏳ Guardando…`; y tras
+la confirmación `✓ Confirmado · Cambiar`. El servidor sigue siendo la fuente
+de verdad y el celular solo refleja `Confirmado ✓`.
+
+**Verificación:** `npm test` y `npm run test:layout` pasan. Se capturaron las
+fases sin selección, vehículo elegido, confirmado y desconfirmado en anfitrión
+e invitado, con viewports `1280x720`, `1366x768` y `1920x1080`; las
+comprobaciones programáticas reportaron `scrollWidth === innerWidth` y
+`scrollHeight === innerHeight`. También se verificó el flujo de
+confirmar/desconfirmar y el build visible `b12`. El control móvil y `#ctrl-stage`
+no fueron modificados.
+
+**Riesgos / pendientes:** la captura se ejecutó en Chromium local; no sustituye
+una prueba física adicional en distintos navegadores. No se modificaron física,
+eventos de carrera ni el layout responsive del control.

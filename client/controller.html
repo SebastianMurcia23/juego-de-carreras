@@ -2,10 +2,10 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="viewport-fit=cover, width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <title>Road Rumble – Control</title>
   <meta name="description" content="Control de volante y poderes para Road Rumble. Gira el celular para dirigir." />
-  <link rel="stylesheet" href="/css/style.css" />
+  <link rel="stylesheet" href="/css/style.css?v=8" />
   <style>
     html, body {
       overflow: hidden;
@@ -23,7 +23,9 @@
 <!-- ═══════════════════════════════════════════════════════════════════════
   PERMANENT HORIZONTAL VIEWPORT (Auto-locks to landscape on all devices)
 ════════════════════════════════════════════════════════════════════════ -->
-<div id="ctrl-viewport">
+<div id="ctrl-viewport" data-phase="connecting">
+<div id="ctrl-stage" data-stage="native">
+<span class="ctrl-build-id" aria-label="Versión b11">b11</span>
 
 <!-- ═══════════════════════════════════════════════════════════════════════
   STATE: connecting
@@ -51,7 +53,7 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════
-  STATE: name-entry
+  STATE: legacy name-entry (not used; configuration belongs to the screen)
 ════════════════════════════════════════════════════════════════════════ -->
 <div id="state-name-entry" class="ctrl-screen" style="display:none;">
   <div class="grid-bg"></div>
@@ -114,73 +116,24 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════
-  STATE: mobile-selection (Stage 2: choose car & weapon on phone)
+  STATE: mobile-selection (waiting for screen configuration)
 ════════════════════════════════════════════════════════════════════════ -->
 <div id="state-mobile-selection" class="ctrl-screen" style="display:none;">
-  <div class="ctrl-loadout-screen">
-    
-    <!-- Top Bar -->
-    <div class="flex-row items-center justify-between w-full" style="justify-content:space-between; max-width:360px;">
-      <span class="font-racing text-cyan" style="font-size:0.9rem;">TU EQUIPAMIENTO</span>
-      <span id="ctrl-player-label" class="badge badge-linked">Piloto</span>
-    </div>
-
-    <!-- Car selection card -->
-    <div class="glass ctrl-car-card">
-      <div style="width:100%; height:110px; position:relative; overflow:hidden; border-radius:10px; background:rgba(0,0,0,0.3); margin-bottom:8px;">
-        <canvas id="ctrl-car-canvas" width="320" height="110" style="width:100%; height:100%; display:block;"></canvas>
-      </div>
-
-      <div class="flex-row items-center justify-between" style="justify-content:space-between; margin-bottom:6px;">
-        <button id="btn-ctrl-car-prev" class="btn btn-secondary btn-sm">◀</button>
-        <div class="flex-col items-center">
-          <span id="ctrl-car-name" class="font-racing text-cyan" style="font-size:1rem; font-weight:700;">Apex Venom</span>
-          <span id="ctrl-car-role" style="font-size:0.68rem; color:var(--text-muted);">Superdeportivo</span>
-        </div>
-        <button id="btn-ctrl-car-next" class="btn btn-secondary btn-sm">▶</button>
+  <div class="ctrl-waiting">
+    <div class="ctrl-waiting-summary">
+      <div class="ctrl-waiting-icon" aria-hidden="true">📱</div>
+      <div>
+        <h2 class="font-racing text-cyan">VINCULADO ✓</h2>
+        <div id="ctrl-player-label" class="badge badge-linked">Piloto 1</div>
+        <div id="ctrl-vehicle-label" class="ctrl-waiting-vehicle">Vehículo: —</div>
       </div>
     </div>
-
-    <!-- Power info card (arcade: no weapon selection) -->
-    <div class="glass ctrl-car-card" style="padding:12px 16px; text-align:center;">
-      <span style="font-size:0.65rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; display:block; margin-bottom:6px;">PODERES</span>
-      <span style="font-size:0.82rem; color:var(--cyan); line-height:1.4;">Recoge cajas arcoíris en la pista<br>para obtener poderes. Usa el botón <strong>PODER</strong>.</span>
+    <div class="ctrl-waiting-actions">
+      <p>Configura tu apodo y vehículo en la pantalla.</p>
+      <button id="btn-ctrl-sensors" class="btn btn-primary">🔓 Activar giroscopio</button>
+      <button id="btn-ctrl-wait-calibrate" class="btn btn-secondary">⧖ Calibrar</button>
+      <p id="ctrl-wait-status" class="ctrl-waiting-status">Sensores: sin activar · esperando la carrera</p>
     </div>
-
-    <!-- Pilot Name Card (Obligatorio para confirmar vehículo) -->
-    <div class="glass ctrl-car-card" style="padding:10px 14px; width:100%;">
-      <label for="ctrl-input-nickname" style="font-size:0.72rem; color:var(--text-muted); display:block; margin-bottom:5px; letter-spacing:0.06em; font-weight:700;">
-        ¿CÓMO QUIERES LLAMARTE?
-      </label>
-      <input
-        id="ctrl-input-nickname"
-        class="input"
-        type="text"
-        placeholder="Tu apodo de piloto…"
-        maxlength="20"
-        autocomplete="off"
-        autocorrect="off"
-        spellcheck="false"
-        style="width:100%; text-align:center; font-size:1.05rem; font-weight:600; padding:10px; border-color:var(--cyan);"
-      />
-    </div>
-
-    <!-- Ready & Go to Controller Buttons -->
-    <div class="flex-col gap-8 w-full items-center">
-      <button id="btn-ctrl-ready" class="btn-ready ctrl-btn-ready" style="width:100%;">
-        🏎️ Confirmar Vehículo
-      </button>
-      <button id="btn-ctrl-unlock" class="btn btn-secondary w-full hidden" style="padding:10px; font-size:0.85rem; border-color:var(--text-muted); color:var(--text-muted);">
-        ✏️ Cambiar vehículo
-      </button>
-      <div id="ctrl-confirmed-badge" class="badge-ready hidden" style="font-size:0.85rem; padding:8px 16px; width:100%; text-align:center;">
-        ✓ Vehículo confirmado · Esperando inicio
-      </div>
-      <button id="btn-back-to-ctrl" class="btn btn-secondary w-full" style="padding:14px; font-weight:700; border-color:var(--cyan); color:var(--cyan);">
-        🎮 Ir al Volante / Control
-      </button>
-    </div>
-
   </div>
 </div>
 
@@ -359,6 +312,7 @@
   <div id="reconnect-overlay" class="gyro-permission hidden">
     <div class="spinner"></div>
     <h2 class="font-racing" style="font-size:1.1rem; color:var(--yellow);">RECONECTANDO…</h2>
+  </div>
   <!-- Results & Intermission overlay on mobile -->
   <div id="ctrl-results-overlay" class="gyro-permission hidden" style="z-index:9000; background:rgba(7, 16, 29, 0.96); overflow-y:auto; padding:24px 18px; max-width:420px; width:100%; border-radius:14px; box-shadow:0 8px 32px rgba(0,0,0,0.8); border:1px solid rgba(0,245,212,0.3);">
     <div style="font-size:2.8rem; text-align:center;">🏁</div>
@@ -385,10 +339,11 @@
 
 </div>
 
+</div><!-- /#ctrl-stage -->
 </div><!-- /#ctrl-viewport -->
 
 <!-- ─── Scripts ──────────────────────────────────────────────────────────── -->
-<script src="/shared/constants.js?v=8"></script>
+<script src="/shared/constants.js?v=10"></script>
 <script src="/config/feature-flags.js"></script>
 <script src="/config/cars.legacy.js"></script>
 <script src="/config/cars.f1.js"></script>
@@ -396,6 +351,6 @@
 <script src="/config/weapons.js"></script>
 <script src="/js/renderCar.js"></script>
 <script src="/socket.io/socket.io.js"></script>
-<script src="/js/controller.js?v=13"></script>
+<script src="/js/controller.js?v=16"></script>
 </body>
 </html>
