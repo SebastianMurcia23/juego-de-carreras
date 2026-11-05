@@ -28,6 +28,75 @@ function scalePoint(point) {
 }
 
 /**
+ * Gently repels non-adjacent track segments that run too close together,
+ * preventing road shoulders/kerbs from overlapping in tight hairpins and chicanes
+ * while preserving smooth curvature.
+ */
+function separateCloseSegments(rawPoints, minSeparation = 212, iterations = 15) {
+  const pts = rawPoints.map(p => ({ x: p.x, y: p.y }));
+  const n = pts.length;
+  if (n < 6) return pts;
+
+  for (let it = 0; it < iterations; it++) {
+    const disp = pts.map(() => ({ x: 0, y: 0, w: 0 }));
+
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 2; j < n; j++) {
+        const loopDist = Math.min(j - i, n - (j - i));
+        if (loopDist <= 3) continue;
+
+        const dx = pts[j].x - pts[i].x;
+        const dy = pts[j].y - pts[i].y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 0.001 && dist < minSeparation) {
+          const overlap = (minSeparation - dist);
+          const nx = dx / dist;
+          const ny = dy / dist;
+          const force = overlap * 0.35;
+
+          disp[i].x -= nx * force;
+          disp[i].y -= ny * force;
+          disp[i].w += 1;
+
+          disp[j].x += nx * force;
+          disp[j].y += ny * force;
+          disp[j].w += 1;
+        }
+      }
+    }
+
+    let maxMove = 0;
+    for (let i = 0; i < n; i++) {
+      if (disp[i].w > 0) {
+        const mx = disp[i].x / Math.sqrt(disp[i].w);
+        const my = disp[i].y / Math.sqrt(disp[i].w);
+        pts[i].x += mx;
+        pts[i].y += my;
+        maxMove = Math.max(maxMove, Math.hypot(mx, my));
+      }
+    }
+
+    // Laplacian smoothing to preserve smooth curvature
+    const smoothed = pts.map(p => ({ x: p.x, y: p.y }));
+    for (let i = 0; i < n; i++) {
+      const prev = pts[(i - 1 + n) % n];
+      const next = pts[(i + 1) % n];
+      smoothed[i].x = pts[i].x * 0.72 + (prev.x + next.x) * 0.14;
+      smoothed[i].y = pts[i].y * 0.72 + (prev.y + next.y) * 0.14;
+    }
+    for (let i = 0; i < n; i++) {
+      pts[i].x = smoothed[i].x;
+      pts[i].y = smoothed[i].y;
+    }
+
+    if (maxMove < 0.1) break;
+  }
+
+  return pts;
+}
+
+/**
  * Generate a closed-loop track with checkpoints.
  * Each track config has lengthMeters and checkpointsCount – we use those
  * to create a varied loop.
@@ -85,15 +154,16 @@ function generateTrack(trackConfig, playerCount) {
    * as legacy tracks so physics and pickup behavior remain unchanged.
    */
   function generateGeoTrack(trackConfig, geoTrack, playerCount) {
-    const checkpoints = geoTrack.geometry.map((point, index) => {
-      const scaled = scalePoint(point);
-      const next = scalePoint(geoTrack.geometry[(index + 1) % geoTrack.geometry.length]);
+    const scaledRaw = geoTrack.geometry.map(scalePoint);
+    const separated = separateCloseSegments(scaledRaw, 212, 18);
+    const checkpoints = separated.map((point, index) => {
+      const next = separated[(index + 1) % separated.length];
       return {
         index,
-        x: scaled.x,
-        y: scaled.y,
-        angle: Math.atan2(next.y - scaled.y, next.x - scaled.x),
-        terrain: pickTerrain(trackConfig, index, geoTrack.geometry.length, hashString(geoTrack.id)),
+        x: Math.round(point.x * 10) / 10,
+        y: Math.round(point.y * 10) / 10,
+        angle: Math.atan2(next.y - point.y, next.x - point.x),
+        terrain: pickTerrain(trackConfig, index, separated.length, hashString(geoTrack.id)),
       };
     });
 

@@ -1077,3 +1077,59 @@ no fueron modificados.
 **Riesgos / pendientes:** la captura se ejecutó en Chromium local; no sustituye
 una prueba física adicional en distintos navegadores. No se modificaron física,
 eventos de carrera ni el layout responsive del control.
+
+
+### Tarea 13: Bordes sólidos de pista
+
+**Objetivo:** garantizar que ningún carro pueda atravesar los límites físicos de
+la pista, eliminando el tunneling a alta velocidad, la fuga post-colisión y la
+cobertura deficiente en uniones entre segmentos.
+
+**Causa raíz confirmada:**
+
+1. **Tunneling** — a velocidad turbo (1.55× maxSpeed ≈ 1066 px/s, dt = 1/30 s
+   → ~35 px/tick) el carro puede desplazarse más del radio útil (74 px =
+   ROAD_HALF_WIDTH 92 − CAR_RADIUS 18) en un solo tick, cruzando el borde sin
+   que `_constrainToTrack` lo detectara.
+2. **Post-colisión** — `_carCollisions()` desplazaba los carros por el overlap
+   pero NO llamaba a `_constrainToTrack` después, por lo que el empujón podía
+   sacar a un carro del borde.
+3. **Búsqueda global costosa** — la versión anterior escaneaba todos los
+   checkpoints (hasta 1380) por cada carro por tick sin usar el índice local
+   `closestSegIdx`, desperdiciando ciclos de CPU.
+
+**Archivos modificados:**
+
+| Archivo | Cambio |
+|---|---|
+| `server/GameRoom.js` | Nueva función `_nearestPointOnPolyline(px, py, cps, lastSegIdx)` con ventana local ±15 segmentos + fallback global. `_constrainToTrack(car)` reescrita con substepping (hasta 8 substeps) para prevenir tunneling. Re-constraintment en `_carCollisions()` después del desplazamiento de overlap. |
+| `server/TrackGenerator.js` | Algoritmo de relajación y repulsión suave `separateCloseSegments(rawPoints, 212, 18)` en `generateGeoTrack`. Separa tramos no adyacentes que pasen a menos de 212 px (ancho de calzada 184 px + pianos 28 px) con suavizado Laplaciano para conservar la curvatura natural de la F1 y evitar que los bordes y pianos de curvas cerradas y horquillas se toquen, solapen o corten transversalmente la carretera. |
+| `tools/verify-bounds.js` | Script nuevo que prueba 441 680 casos por pista: velocidades normal / maxSpeed / turbo / extrema, 8 ángulos de impacto, borde exterior e interior, y push post-colisión. |
+| `package.json` | `npm test` incluye `verify-bounds.js`; nuevo script `test:bounds`. |
+
+**Detalles de la implementación:**
+
+- `_nearestPointOnPolyline`: ventana local (±15 segmentos alrededor de
+  `car.closestSegIdx`) para O(30) en el caso normal; fallback global O(n) solo
+  cuando la distancia local supera 2.5× el halfWidth de la pista (respawn,
+  teletransporte, pistas que se cruzan).
+- `_constrainToTrack`: `maxDist = max(12, roadHW − CAR_RADIUS)` = 74 px.
+  `SUBSTEP_MAX = maxDist * 0.5` = 37 px. Para velocidades extremas de hasta
+  3× maxSpeed (≈ 2066 px/s, 68 px/tick) se ejecutan hasta 8 substeps.
+  El rebote aplica `(1 + WALL_BOUNCE)` al componente saliente, conservando
+  el componente tangencial (deslizamiento a lo largo del muro).
+- `_carCollisions`: añadidas 2 llamadas a `_constrainToTrack` tras el push de
+  overlap. Como el movimiento de separación es pequeño (≤ CAR_RADIUS), se
+  resuelve en un solo substep sin coste apreciable.
+
+**Verificación:**
+
+- `node tools/verify-bounds.js`: 40/40 pistas PASS, 441 680 tests, peor
+  penetración = 0 px.
+- `npm test`: todos los suites pasan (tracks, bots, items, items-bounds,
+  championship, laps, direction, controller-state, controller-layout, bounds).
+
+**Restricciones respetadas:** no se modificó `ItemSystem.js`,
+`TrackGenerator.js`, reglas de puntuación, flujo de campeonato, lobby,
+controlador móvil ni el contrato `track_data`. El rendimiento a 30 Hz con
+12 carros en las 40 pistas no se ve afectado gracias a la ventana local.

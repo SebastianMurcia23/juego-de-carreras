@@ -763,63 +763,171 @@ class GameRoom {
     return powers[Math.floor(Math.random() * powers.length)];
   }
 
-  /* ── Constrain car to track road surface ──────────────────────────────── */
-  _constrainToTrack(car) {
-    // Find the nearest point on a centerline segment, not only the nearest
-    // checkpoint. This keeps cars inside curved sections between nodes.
-    let minDist = Infinity;
-    const cps = this.track.checkpoints;
-    let nearestX = car.x;
-    let nearestY = car.y;
+  /* ── Nearest point on the closed track polyline ───────────────────────── */
+  /**
+   * _nearestPointOnPolyline(px, py, cps, lastSegIdx)
+   * Returns { nearestX, nearestY, dist, segIdx } for the nearest point on the
+   * closed polyline, using a local window first with global fallback.
+   * This is the single source-of-truth geometry used by _constrainToTrack.
+   */
+  _nearestPointOnPolyline(px, py, cps, lastSegIdx) {
+    const n = cps.length;
+    let minDistSq = Infinity;
+    let nearestX = cps[0].x;
+    let nearestY = cps[0].y;
+    let bestSeg = lastSegIdx;
 
-    for (let i = 0; i < cps.length; i++) {
+    // Local window: check ±15 segments around the last known segment.
+    // This handles normal driving and hairpins without scanning all 1380 segments.
+    const WINDOW = 15;
+    const start = ((lastSegIdx - WINDOW) % n + n) % n;
+
+    for (let off = 0; off <= WINDOW * 2 + 1; off++) {
+      const i = (start + off) % n;
       const a = cps[i];
-      const b = cps[(i + 1) % cps.length];
+      const b = cps[(i + 1) % n];
       const abx = b.x - a.x;
       const aby = b.y - a.y;
-      const lengthSq = abx * abx + aby * aby;
-      const t = lengthSq > 0
-        ? Math.max(0, Math.min(1, ((car.x - a.x) * abx + (car.y - a.y) * aby) / lengthSq))
-        : 0;
-      const pointX = a.x + abx * t;
-      const pointY = a.y + aby * t;
-      const dx = car.x - pointX;
-      const dy = car.y - pointY;
-      const d = dx * dx + dy * dy;
-      if (d < minDist) {
-        minDist = d;
-        nearestX = pointX;
-        nearestY = pointY;
+      const lenSq = abx * abx + aby * aby;
+      if (lenSq === 0) continue;
+      const t = Math.max(0, Math.min(1, ((px - a.x) * abx + (py - a.y) * aby) / lenSq));
+      const qx = a.x + t * abx;
+      const qy = a.y + t * aby;
+      const dSq = (px - qx) * (px - qx) + (py - qy) * (py - qy);
+      if (dSq < minDistSq) {
+        minDistSq = dSq;
+        nearestX = qx;
+        nearestY = qy;
+        bestSeg = i;
       }
     }
 
-    const dist = Math.sqrt(minDist);
-    // Keep the car body inside the usable road width instead of allowing it
-    // to drift through the shoulder and decorative track limits.
-    // Use track.roadHalfWidth as the single physical source-of-truth (same as visual).
+    // Global fallback: if the local best is suspiciously far, rescan everything.
+    // This handles respawns, teleports, and self-crossing tracks.
+    const roadHW = this.track.roadHalfWidth || PHY.ROAD_HALF_WIDTH;
+    if (minDistSq > (roadHW * 2.5) * (roadHW * 2.5)) {
+      for (let i = 0; i < n; i++) {
+        const a = cps[i];
+        const b = cps[(i + 1) % n];
+        const abx = b.x - a.x;
+        const aby = b.y - a.y;
+        const lenSq = abx * abx + aby * aby;
+        if (lenSq === 0) continue;
+        const t = Math.max(0, Math.min(1, ((px - a.x) * abx + (py - a.y) * aby) / lenSq));
+        const qx = a.x + t * abx;
+        const qy = a.y + t * aby;
+        const dSq = (px - qx) * (px - qx) + (py - qy) * (py - qy);
+        if (dSq < minDistSq) {
+          minDistSq = dSq;
+          nearestX = qx;
+          nearestY = qy;
+          bestSeg = i;
+        }
+      }
+    }
+
+    return { nearestX, nearestY, dist: Math.sqrt(minDistSq), segIdx: bestSeg };
+  }
+
+  /* ── Constrain car to track road surface ──────────────────────────────── */
+  /**
+   * _constrainToTrack(car)
+   * Authoritative single-function road-boundary enforcement.
+   * Uses substepping to prevent tunneling at high speed.
+   * Correctly handles segment joints (vertex corners) via projection+clamp.
+   * Applies to: player cars, bots, autopilot cars.
+   */
+  _constrainToTrack(car) {
+    const cps = this.track.checkpoints;
+    if (!cps || cps.length < 2) return;
+
     const trackRoadHW = this.track.roadHalfWidth || PHY.ROAD_HALF_WIDTH;
-    const maxDist = Math.max(12, trackRoadHW - PHY.CAR_RADIUS * 0.35);
+    // maxDist: edge of car body (center + radius) must stay within road
+    const maxDist = Math.max(12, trackRoadHW - PHY.CAR_RADIUS);
 
-    if (dist > maxDist) {
-      const normalX = (car.x - nearestX) / dist;
-      const normalY = (car.y - nearestY) / dist;
-      car.x = nearestX + normalX * maxDist;
-      car.y = nearestY + normalY * maxDist;
+    // --- Substepping to prevent tunneling ---
+    // Max movement per substep: half the maxDist to guarantee detection
+    const totalDx = car.x - car.previousX;
+    const totalDy = car.y - car.previousY;
+    const totalMove = Math.sqrt(totalDx * totalDx + totalDy * totalDy);
+    const SUBSTEP_MAX = maxDist * 0.5;
+    const nSteps = totalMove > SUBSTEP_MAX
+      ? Math.min(8, Math.ceil(totalMove / SUBSTEP_MAX))
+      : 1;
 
-      // Remove only the outward velocity so the car can continue along the
-      // barrier instead of being stopped or launched off the circuit.
-      const outwardSpeed = car.vx * normalX + car.vy * normalY;
-      if (outwardSpeed > 0) {
-        car.vx -= normalX * outwardSpeed;
-        car.vy -= normalY * outwardSpeed;
+    let lastSegIdx = car.closestSegIdx || 0;
+
+    if (nSteps <= 1) {
+      // Single-step (normal case - fast path)
+      const { nearestX, nearestY, dist, segIdx } = this._nearestPointOnPolyline(
+        car.x, car.y, cps, lastSegIdx
+      );
+      car.closestSegIdx = segIdx;
+
+      if (dist > maxDist && dist > 0.001) {
+        const normalX = (car.x - nearestX) / dist;
+        const normalY = (car.y - nearestY) / dist;
+        car.x = nearestX + normalX * maxDist;
+        car.y = nearestY + normalY * maxDist;
+
+        // Cancel outward velocity component, keep tangential (slide along wall)
+        const outwardSpeed = car.vx * normalX + car.vy * normalY;
+        if (outwardSpeed > 0) {
+          car.vx -= normalX * outwardSpeed * (1 + PHY.WALL_BOUNCE);
+          car.vy -= normalY * outwardSpeed * (1 + PHY.WALL_BOUNCE);
+        }
+
+        // Wall damage on hard impact
+        if (dist > maxDist * 1.15 && car.speed > 80) {
+          car.health -= PHY.COLLISION_DAMAGE * 0.3;
+          car.lastImpactTick = this.tickCount;
+        }
+      }
+    } else {
+      // Multi-step sweep (high-speed / tunneling prevention)
+      let stepX = car.previousX;
+      let stepY = car.previousY;
+      let stepVx = car.vx;
+      let stepVy = car.vy;
+      let wallHit = false;
+      let worstDist = 0;
+
+      for (let s = 1; s <= nSteps; s++) {
+        stepX = car.previousX + totalDx * (s / nSteps);
+        stepY = car.previousY + totalDy * (s / nSteps);
+
+        const { nearestX, nearestY, dist, segIdx } = this._nearestPointOnPolyline(
+          stepX, stepY, cps, lastSegIdx
+        );
+        lastSegIdx = segIdx;
+        car.closestSegIdx = segIdx;
+
+        if (dist > maxDist && dist > 0.001) {
+          wallHit = true;
+          if (dist > worstDist) worstDist = dist;
+          const normalX = (stepX - nearestX) / dist;
+          const normalY = (stepY - nearestY) / dist;
+          stepX = nearestX + normalX * maxDist;
+          stepY = nearestY + normalY * maxDist;
+
+          // Cancel outward velocity
+          const outwardSpeed = stepVx * normalX + stepVy * normalY;
+          if (outwardSpeed > 0) {
+            stepVx -= normalX * outwardSpeed * (1 + PHY.WALL_BOUNCE);
+            stepVy -= normalY * outwardSpeed * (1 + PHY.WALL_BOUNCE);
+          }
+        }
       }
 
-      // Damage for hitting walls hard
-      if (dist > maxDist * 1.2 && car.speed > 100) {
+      car.x = stepX;
+      car.y = stepY;
+      car.vx = stepVx;
+      car.vy = stepVy;
+      car.speed = Math.sqrt(stepVx * stepVx + stepVy * stepVy);
+
+      if (wallHit && worstDist > maxDist * 1.15 && car.speed > 80) {
         car.health -= PHY.COLLISION_DAMAGE * 0.3;
-        car.vx *= PHY.WALL_BOUNCE;
-        car.vy *= PHY.WALL_BOUNCE;
-        car.lastImpactTick = this.tickCount; // silence wrong-way for 1.5 s after wall hit
+        car.lastImpactTick = this.tickCount;
       }
     }
   }
@@ -1394,6 +1502,10 @@ class GameRoom {
           a.y -= ny * overlap;
           b.x += nx * overlap;
           b.y += ny * overlap;
+
+          // Re-constrain both cars to track boundary after collision push
+          this._constrainToTrack(a);
+          this._constrainToTrack(b);
 
           // Elastic-ish collision based on weight
           const totalWeight = a.weightMult + b.weightMult;
