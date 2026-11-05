@@ -1147,3 +1147,17 @@ controlador móvil ni el contrato `track_data`. El rendimiento a 30 Hz con
 | `server/GameRoom.js` | En `_checkCheckpoints`: cuando P1 cruza la meta, no se activa cuenta atrás forzada ni `RACE_COUNTDOWN_FINISH` a menos que esté explícitamente configurado `finishTimeoutSeconds > 0`. En `_checkRaceEnd`: la carrera solo finaliza cuando `allFinished === true` (todos los jugadores activos cruzaron la meta), registrando los puestos y tiempos reales de todos sin DNF prematuro. |
 
 **Verificación:** prueba unitaria de 2 jugadores con P1 terminado y simulación de 60 s continuando normalmente hasta la llegada de P2; `npm test` completo en verde (10/10 suites).
+
+### Tarea 15: Botones de giroscopio y calibración integrados en el volante
+
+**Objetivo:** retirar los botones de activación y calibración de la pantalla de espera inicial y colocarlos directamente en el cluster del volante en cabina, permitiendo reactivar o calibrar el giroscopio en cualquier momento de la carrera si se suspende o descalibra.
+
+**Archivos modificados:**
+
+| Archivo | Cambio |
+|---|---|
+| `client/controller.html` | Eliminados los botones redundantes de activación y calibración en `.ctrl-waiting-actions`. Añadido botón `#btn-activate-gyro` e integrado junto a `#btn-calibrate` en la barra de utilidades del volante (`.ctrl-util-bar`). Añadida indicación táctil interactiva. |
+| `client/js/controller.js` | Implementada `updateGyroButtonState(active)` con feedback dinámico (`📡 Giroscopio Activo ✓` / `🔓 Activar Giroscopio`). Listeners para activar/reactivar giroscopio en cualquier momento mediante toque de botón o toque directo en el volante `.horizon-ring`. |
+| `client/css/style.css` | Ajuste de layout de `.ctrl-util-bar` para acomodar los controles del volante de forma ergonómica en pantallas móviles. |
+
+**Verificación:** `verify-controller-layout.js` PASS, `verify-controller-state.js` PASS, `npm test` completo (10/10 suites).

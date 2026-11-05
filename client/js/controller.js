@@ -375,6 +375,7 @@ function handleMotion(e) {
   if (Math.abs(gx) < 0.01 && Math.abs(gy) < 0.01) return;
 
   S.hasMotionData = true;
+  updateGyroButtonState(true);
 
   let rawAngle = 0;
 
@@ -407,7 +408,30 @@ function handleOrientation(e) {
 
   // In portrait CSS-rotated mode, lateral tilt around Z axis is gamma!
   const gamma = e.gamma ?? 0;
+  updateGyroButtonState(true);
   processSensorTilt(gamma, 'orientation');
+}
+
+function updateGyroButtonState(active) {
+  const btn = $('btn-activate-gyro');
+  if (!btn) return;
+  if (active) {
+    if (!btn._isMarkedActive) {
+      btn._isMarkedActive = true;
+      btn.textContent = '📡 Giroscopio Activo ✓';
+      btn.classList.remove('btn-primary');
+      btn.classList.add('btn-secondary');
+      btn.style.borderColor = 'var(--cyan)';
+      btn.style.color = 'var(--cyan)';
+    }
+  } else {
+    btn._isMarkedActive = false;
+    btn.textContent = '🔓 Activar Giroscopio';
+    btn.classList.add('btn-primary');
+    btn.classList.remove('btn-secondary');
+    btn.style.borderColor = '';
+    btn.style.color = '';
+  }
 }
 
 function updateSteerVisuals(steerVal, rawDeg, source) {
@@ -501,6 +525,7 @@ async function activateSensorsByUserGesture() {
       ? 'Sensores denegados · usa botones táctiles'
       : 'Sensores activados ✓ · esperando la carrera';
   }
+  updateGyroButtonState(!permissionDenied);
   return !permissionDenied;
 }
 
@@ -1262,8 +1287,39 @@ function wireButtons() {
 
   // Mobile loadout controls
 
+  // Wheel gyro activation and calibration (accessible in cockpit at any time)
+  $('btn-activate-gyro')?.addEventListener('click', async () => {
+    toast('📡 Activando giroscopio…', 'info', 1200);
+    const success = await activateSensorsByUserGesture();
+    if (success) {
+      updateGyroButtonState(true);
+      toast('✓ Giroscopio activado con éxito', 'success', 2000);
+    } else {
+      toast('⚠️ Sensores denegados. Permítelos en ajustes', 'error', 3000);
+    }
+  });
+
   // Invert & Calibrate & Sensitivity
-  $('btn-calibrate')?.addEventListener('click', calibrate);
+  $('btn-calibrate')?.addEventListener('click', async () => {
+    if (!S.hasMotionData) {
+      await activateSensorsByUserGesture();
+    }
+    calibrate();
+  });
+
+  // Touch on the physical steering horizon ring to calibrate / wake up gyro
+  const horizonRing = document.querySelector('.horizon-ring');
+  if (horizonRing) {
+    horizonRing.style.cursor = 'pointer';
+    horizonRing.setAttribute('title', 'Toca el volante para calibrar o reactivar');
+    horizonRing.addEventListener('click', async () => {
+      if (!S.hasMotionData) {
+        await activateSensorsByUserGesture();
+      }
+      calibrate();
+    });
+  }
+
   $('btn-invert')?.addEventListener('click', () => {
     S.inverted = !S.inverted;
     toast(S.inverted ? '⇄ Giro invertido' : '⇄ Giro normal');

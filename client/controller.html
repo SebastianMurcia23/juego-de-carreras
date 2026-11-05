@@ -130,9 +130,7 @@
     </div>
     <div class="ctrl-waiting-actions">
       <p>Configura tu apodo y vehículo en la pantalla.</p>
-      <button id="btn-ctrl-sensors" class="btn btn-primary">🔓 Activar giroscopio</button>
-      <button id="btn-ctrl-wait-calibrate" class="btn btn-secondary">⧖ Calibrar</button>
-      <p id="ctrl-wait-status" class="ctrl-waiting-status">Sensores: sin activar · esperando la carrera</p>
+      <p id="ctrl-wait-status" class="ctrl-waiting-status">Esperando confirmación en la pantalla…</p>
     </div>
   </div>
 </div>
@@ -259,12 +257,15 @@
         📡 SENSOR: INICIANDO…
       </div>
       <p style="font-size:0.55rem; color:var(--text-muted); text-align:center; margin-top:4px; line-height:1.4;">
-        Si el volante está girado, toca <strong style="color:var(--cyan)">⧖ Calibrar</strong> con el teléfono recto.
+        Toca <strong style="color:var(--cyan)">🔓 Activar</strong> o <strong style="color:var(--yellow)">⌖ Calibrar</strong> en el volante si el giro se detiene o se desalinea.
       </p>
 
-      <!-- Quick utility controls -->
+      <!-- Quick utility controls directly on the steering cluster -->
       <div class="ctrl-util-bar">
-        <button id="btn-calibrate" class="btn btn-secondary btn-sm" type="button" title="Calibrar volante (posición neutral)">
+        <button id="btn-activate-gyro" class="btn btn-primary btn-sm" type="button" title="Activar o reactivar giroscopio en cualquier momento">
+          🔓 Activar Giroscopio
+        </button>
+        <button id="btn-calibrate" class="btn btn-secondary btn-sm" type="button" title="Calibrar volante (posición neutral actual)">
           ⌖ Calibrar
         </button>
         <button id="btn-invert" class="btn btn-secondary btn-sm" type="button" title="Invertir dirección de giro">

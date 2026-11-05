@@ -946,11 +946,11 @@ body:has(#ctrl-viewport) {
   flex-wrap: wrap;
   gap: 4px;
   justify-content: center;
-  max-width: 280px;
+  max-width: 320px;
 }
 .ctrl-util-bar .btn {
-  padding: 4px 8px;
-  font-size: 0.65rem;
+  padding: 4px 7px;
+  font-size: 0.62rem;
 }
 
 /* Ergonomic Thumb Action Buttons */
