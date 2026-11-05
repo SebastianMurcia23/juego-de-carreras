@@ -386,13 +386,13 @@ function handleMotion(e) {
     // Tilt right: right hand down -> gy < 0 -> rawAngle > 0 (positive = steer right).
     rawAngle = -Math.atan2(gy, Math.max(1.5, Math.abs(gx))) * (180 / Math.PI);
   } else {
-    // Natural landscape:
-    // Left hand at -X, Right hand at +X. Gravity pulls down towards -Y.
-    // Tilt left: left hand down -> gx < 0 -> rawAngle < 0.
-    // Tilt right: right hand down -> gx > 0 -> rawAngle > 0.
+    // Natural landscape / fullscreen mode:
+    // The player still holds the phone with both hands by its two short ends (long axis = Y axis of hardware).
+    // In standard landscape (screen angle 90° or 0°), top of phone (+Y) is at the left hand.
+    // In reverse landscape (screen angle 270° or -90°), top of phone (+Y) is at the right hand.
     const screenAngle = getOrientationAngle();
-    const sign = (screenAngle === 270 || screenAngle === -90) ? -1 : 1;
-    rawAngle = sign * Math.atan2(gx, Math.max(1.5, Math.abs(gy))) * (180 / Math.PI);
+    const sign = (screenAngle === 270 || screenAngle === -90) ? 1 : -1;
+    rawAngle = sign * Math.atan2(gy, Math.max(1.5, Math.abs(gx))) * (180 / Math.PI);
   }
 
   processSensorTilt(rawAngle, 'motion');
@@ -406,10 +406,23 @@ function handleOrientation(e) {
   if (S.hasMotionData) return;
   if (e.gamma === null && e.beta === null) return;
 
-  // In portrait CSS-rotated mode, lateral tilt around Z axis is gamma!
-  const gamma = e.gamma ?? 0;
+  let angle = 0;
+  if (isUIRotatedPortrait()) {
+    // In portrait CSS-rotated mode, lateral tilt around Z axis is gamma
+    angle = e.gamma ?? 0;
+  } else {
+    // In landscape mode, lateral tilt is beta (around X axis) aligned with the screen orientation
+    const screenAngle = getOrientationAngle();
+    if (screenAngle === 90) {
+      angle = -(e.beta ?? 0);
+    } else if (screenAngle === 270 || screenAngle === -90) {
+      angle = (e.beta ?? 0);
+    } else {
+      angle = e.gamma ?? 0;
+    }
+  }
   updateGyroButtonState(true);
-  processSensorTilt(gamma, 'orientation');
+  processSensorTilt(angle, 'orientation');
 }
 
 function updateGyroButtonState(active) {
@@ -676,14 +689,14 @@ function calibrate() {
     const g = e.accelerationIncludingGravity;
     let current = 0;
     if (g) {
+      const gy = g.y ?? 0;
+      const clampedY = Math.max(-9.8, Math.min(9.8, gy));
       if (isUIRotatedPortrait()) {
-        const gy = g.y ?? 0;
-        const clampedY = Math.max(-9.8, Math.min(9.8, gy));
         current = -Math.asin(clampedY / 9.8) * (180 / Math.PI);
       } else {
-        const gx = g.x ?? 0;
-        const clampedX = Math.max(-9.8, Math.min(9.8, gx));
-        current = Math.asin(clampedX / 9.8) * (180 / Math.PI);
+        const screenAngle = getOrientationAngle();
+        const sign = (screenAngle === 270 || screenAngle === -90) ? 1 : -1;
+        current = sign * Math.asin(clampedY / 9.8) * (180 / Math.PI);
       }
     }
     S.baseline = current;
@@ -1244,6 +1257,8 @@ function wireButtons() {
   applyStageLayout();
   window.addEventListener('resize', applyStageLayout);
   window.addEventListener('orientationchange', applyStageLayout);
+  document.addEventListener('fullscreenchange', applyStageLayout);
+  document.addEventListener('webkitfullscreenchange', applyStageLayout);
   window.visualViewport?.addEventListener('resize', applyStageLayout);
 
   // Global user gesture listener to unlock mobile sensors seamlessly

@@ -1161,3 +1161,23 @@ controlador móvil ni el contrato `track_data`. El rendimiento a 30 Hz con
 | `client/css/style.css` | Ajuste de layout de `.ctrl-util-bar` para acomodar los controles del volante de forma ergonómica en pantallas móviles. |
 
 **Verificación:** `verify-controller-layout.js` PASS, `verify-controller-state.js` PASS, `npm test` completo (10/10 suites).
+
+### Tarea 16: Consistencia del volante y giroscopio en pantalla completa (Fullscreen)
+
+**Objetivo:** garantizar que el volante físico responda con idéntica sensibilidad, eje de giro natural y suavidad en todos los celulares tanto en orientación estándar como cuando el navegador entra en pantalla completa (fullscreen) o cambia el viewport a horizontal/landscape nativo.
+
+**Causa raíz:**
+1. En celulares Android, al ingresar a pantalla completa (`requestFullscreen` / `screen.orientation.lock('landscape')`), la pantalla cambiaba a orientación horizontal nativa (`width >= height`), lo que hacía que `isUIRotatedPortrait()` retornara `false`.
+2. La rama landscape de `handleMotion()` y `calibrate()` conmutaba el eje medido de `gy` a `gx`. Dado que el jugador siempre sujeta el smartphone por los dos extremos longitudinales (lado largo físico del chasis, que corresponde al eje Y de hardware), leer `gx` provocaba que el volante dejara de responder a la inclinación de las manos e interpretara el cabeceo/pitch adelante-atrás, moviéndose de forma errática o invertida.
+3. Faltaba sincronizar de forma reactiva el layout ante los eventos `fullscreenchange` y `webkitfullscreenchange`.
+
+**Archivos modificados:**
+
+| Archivo | Cambio |
+|---|---|
+| `client/js/controller.js` | En `handleMotion`: normalizado el cálculo del ángulo tanto en modo portrait rotado por CSS como en landscape nativo/fullscreen para usar el eje longitudinal físico de hardware ($g_y$), respetando la orientación de pantalla (`screenAngle` a 90° vs 270°). En `calibrate`: calibración uniforme usando $g_y$ con el mismo signo. En `handleOrientation`: normalizado el eje de fallback lateral. En `wireButtons`: listeners para `fullscreenchange` y `webkitfullscreenchange` asegurando redimensionamiento inmediato. |
+
+**Verificación:**
+- `node tools/verify-controller-layout.js`: PASS.
+- `node tools/verify-controller-state.js`: PASS.
+- `npm test`: 10/10 suites PASS (incluyendo 40/40 circuitos en `verify-bounds`, `verify-bots`, `verify-tracks`, etc.).
