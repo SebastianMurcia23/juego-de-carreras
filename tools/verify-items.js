@@ -47,7 +47,7 @@ console.log('\n[Test 1] Testing probability distribution over 2000 rolls (1st vs
   cars.set('car1', { seatToken: 'car1', alive: true, finished: false, lap: 1, currentCP: 10 });
   cars.set('car2', { seatToken: 'car2', alive: true, finished: false, lap: 1, currentCP: 5 });
 
-  const dummyTrack = { checkpoints: [{ x: 0, y: 0 }, { x: 100, y: 0 }], roadHalfWidth: 92 };
+  const dummyTrack = { checkpoints: [{ x: 0, y: 0 }, { x: 100, y: 0 }], roadHalfWidth: 184 };
   const itemSystem = new ItemSystem(fakeIo(), 'TEST', cars, dummyTrack);
   itemSystem.initBoxes([{ dimensions: { length: 65 } }]);
 
@@ -111,7 +111,7 @@ console.log('\n[Test 2] Testing server roulette lockout (rejects use before 0.9s
   };
   cars.set('test1', testCar);
 
-  const dummyTrack = { checkpoints: [{ x: 10, y: 10 }, { x: 50, y: 10 }], roadHalfWidth: 92 };
+  const dummyTrack = { checkpoints: [{ x: 10, y: 10 }, { x: 50, y: 10 }], roadHalfWidth: 184 };
   const itemSys = new ItemSystem(fakeIo(), 'TEST', cars, dummyTrack);
   itemSys.initBoxes([{ dimensions: { length: 65 } }]);
 
@@ -156,7 +156,7 @@ console.log('\n[Test 3] Testing single item constraint (cannot collect another b
   };
   cars.set('test1', testCar);
 
-  const dummyTrack = { checkpoints: [{ x: 10, y: 10 }, { x: 50, y: 10 }], roadHalfWidth: 92 };
+  const dummyTrack = { checkpoints: [{ x: 10, y: 10 }, { x: 50, y: 10 }], roadHalfWidth: 184 };
   const itemSys = new ItemSystem(fakeIo(), 'TEST', cars, dummyTrack);
   itemSys.initBoxes([{ dimensions: { length: 65 } }]);
   itemSys.boxes[0].x = 10;
@@ -181,7 +181,7 @@ console.log('\n[Test 3] Testing single item constraint (cannot collect another b
 console.log('\n[Test 4] Testing projectiles and oils lifespan and auto-destruction...');
 {
   const cars = new Map();
-  const dummyTrack = { checkpoints: [{ x: 0, y: 0 }, { x: 100, y: 0 }], roadHalfWidth: 92 };
+  const dummyTrack = { checkpoints: [{ x: 0, y: 0 }, { x: 100, y: 0 }], roadHalfWidth: 184 };
   const itemSys = new ItemSystem(fakeIo(), 'TEST', cars, dummyTrack);
   itemSys.initBoxes([{ dimensions: { length: 65 } }]);
 

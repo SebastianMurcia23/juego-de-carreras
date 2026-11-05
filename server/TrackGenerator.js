@@ -31,8 +31,10 @@ function scalePoint(point) {
  * Gently repels non-adjacent track segments that run too close together,
  * preventing road shoulders/kerbs from overlapping in tight hairpins and chicanes
  * while preserving smooth curvature.
+ * With 4 lanes (roadHalfWidth = 184 + curbW = 14 -> 198 px radius), minSeparation >= 396 px
+ * is required so outer borders never touch or overlap. 450 px provides clean grass clearance.
  */
-function separateCloseSegments(rawPoints, minSeparation = 212, iterations = 15) {
+function separateCloseSegments(rawPoints, minSeparation = 450, iterations = 30) {
   const pts = rawPoints.map(p => ({ x: p.x, y: p.y }));
   const n = pts.length;
   if (n < 6) return pts;
@@ -43,7 +45,7 @@ function separateCloseSegments(rawPoints, minSeparation = 212, iterations = 15) 
     for (let i = 0; i < n; i++) {
       for (let j = i + 2; j < n; j++) {
         const loopDist = Math.min(j - i, n - (j - i));
-        if (loopDist <= 3) continue;
+        if (loopDist <= 4) continue;
 
         const dx = pts[j].x - pts[i].x;
         const dy = pts[j].y - pts[i].y;
@@ -53,7 +55,7 @@ function separateCloseSegments(rawPoints, minSeparation = 212, iterations = 15) 
           const overlap = (minSeparation - dist);
           const nx = dx / dist;
           const ny = dy / dist;
-          const force = overlap * 0.35;
+          const force = overlap * 0.40;
 
           disp[i].x -= nx * force;
           disp[i].y -= ny * force;
@@ -82,8 +84,8 @@ function separateCloseSegments(rawPoints, minSeparation = 212, iterations = 15) 
     for (let i = 0; i < n; i++) {
       const prev = pts[(i - 1 + n) % n];
       const next = pts[(i + 1) % n];
-      smoothed[i].x = pts[i].x * 0.72 + (prev.x + next.x) * 0.14;
-      smoothed[i].y = pts[i].y * 0.72 + (prev.y + next.y) * 0.14;
+      smoothed[i].x = pts[i].x * 0.78 + (prev.x + next.x) * 0.11;
+      smoothed[i].y = pts[i].y * 0.78 + (prev.y + next.y) * 0.11;
     }
     for (let i = 0; i < n; i++) {
       pts[i].x = smoothed[i].x;
@@ -155,7 +157,7 @@ function generateTrack(trackConfig, playerCount) {
    */
   function generateGeoTrack(trackConfig, geoTrack, playerCount) {
     const scaledRaw = geoTrack.geometry.map(scalePoint);
-    const separated = separateCloseSegments(scaledRaw, 212, 18);
+    const separated = separateCloseSegments(scaledRaw, 450, 30);
     const checkpoints = separated.map((point, index) => {
       const next = separated[(index + 1) % separated.length];
       return {
@@ -212,7 +214,7 @@ function generateTrack(trackConfig, playerCount) {
     for (let i = 0; i < Math.max(playerCount, 12); i++) {
       const row = Math.floor(i / 4);
       const col = i % 4;
-      const lateralOffset = (col - 1.5) * 40;  // cols: -60, -20, +20, +60 (within ±92 half-width)
+      const lateralOffset = (col - 1.5) * 72;  // cols: -108, -36, +36, +108 (spaced across 4 lanes within ±184 half-width)
       const rowPoint = pointBehindStart((row + 1) * 55);  // extra spacing keeps cars behind
       // Use the global start angle (CP[0]) for the lateral offset so ALL starts are
       // guaranteed to lie behind the finish line regardless of curve at that point.
@@ -308,7 +310,7 @@ function generateTrack(trackConfig, playerCount) {
   for (let i = 0; i < Math.max(playerCount, 12); i++) {
     const row = Math.floor(i / 4);
     const col = i % 4;
-    const lateralOffset = (col - 1.5) * 40;  // cols: -60, -20, +20, +60 (within ±92 half-width)
+    const lateralOffset = (col - 1.5) * 72;  // cols: -108, -36, +36, +108 (spaced across 4 lanes within ±184 half-width)
     const backOffset    = -(row + 1) * 50;
 
     startPositions.push({

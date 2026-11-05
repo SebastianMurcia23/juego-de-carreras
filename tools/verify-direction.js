@@ -119,7 +119,7 @@ async function runDirectionVerification() {
     assert(gridDot >= 0.7, `Track ${trackConfig.id} grid not aligned with finish tangent (dot: ${gridDot.toFixed(2)})`);
 
     // Verify all 12 grid spots are within road half-width and behind start line
-    const roadHW = rawTrack.roadHalfWidth || PHY.TRACK_RENDER_HALF_WIDTH || 92;
+    const roadHW = rawTrack.roadHalfWidth || PHY.TRACK_RENDER_HALF_WIDTH || 184;
     for (let i = 0; i < rawTrack.startPositions.length; i++) {
       const sp = rawTrack.startPositions[i];
       // Dot with start finish line: (sp - cp0) . (tx, ty) should be <= 0 (behind start line)
@@ -171,7 +171,7 @@ async function runDirectionVerification() {
 
     const cps = game.track.checkpoints;
     const n = cps.length;
-    const roadHW = game.track.roadHalfWidth || 92;
+    const roadHW = game.track.roadHalfWidth || 184;
 
     const lanes = [
       { car: carCenter, offsetRatio: 0.0, speed: 180 },

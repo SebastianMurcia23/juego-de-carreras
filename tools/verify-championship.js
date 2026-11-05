@@ -146,7 +146,7 @@ async function runComprehensiveChampionshipVerification() {
       // Verify (d): Track B item boxes generated and within track halfWidth road limits
       const itemBoxes = game.itemSystem.boxes;
       assert(itemBoxes.length > 0, `Track ${currentTrack.id} must have item boxes generated`);
-      const roadHW = game.track.roadHalfWidth || 92;
+      const roadHW = game.track.roadHalfWidth || 184;
       for (const box of itemBoxes) {
         assert(Number.isFinite(box.x) && Number.isFinite(box.y), 'Item box has non-finite coordinates');
         const nearPt = game.itemSystem._nearestTrackPoint(box.x, box.y);

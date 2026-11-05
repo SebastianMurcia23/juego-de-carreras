@@ -239,7 +239,7 @@
     var red   = new THREE.Color(0xe24b4a);
     var white = new THREE.Color(0xffffff);
 
-    var HW = track.roadHalfWidth || 92;
+    var HW = track.roadHalfWidth || 184;
     var curbW = 14;
 
     // 1. Asphalt road (alternating shades matching reference)
@@ -251,8 +251,15 @@
     // 3. Left kerb / piano (alternating white/red)
     ribbon(-HW - curbW, -HW, 0.08, function(i) { return Math.floor(i / 3) % 2 ? white : red; });
 
-    // 4. Center dashed line
+    // 4. Four visual lanes (3 dashed lane divider ribbons, preserving 92 px width per lane):
+    // Divider 1: between Lane 1 and Lane 2 at -HW * 0.5 (-92 px)
+    ribbon(-HW * 0.5 - 2.5, -HW * 0.5 + 2.5, 0.10, function(i) { return Math.floor(i / 4) % 2 ? white : asph; });
+
+    // Divider 2: Center dashed line between Lane 2 and Lane 3 at 0 px
     ribbon(-2.5, 2.5, 0.10, function(i) { return Math.floor(i / 4) % 2 ? white : asph; });
+
+    // Divider 3: between Lane 3 and Lane 4 at +HW * 0.5 (+92 px)
+    ribbon(HW * 0.5 - 2.5, HW * 0.5 + 2.5, 0.10, function(i) { return Math.floor(i / 4) % 2 ? white : asph; });
 
     // Directional chevron arrows along track asphalt (CAMBIO 1.5)
     var chevTex = (function() {
@@ -277,7 +284,7 @@
       opacity: 0.65,
       depthWrite: false
     });
-    var chevGeo = new THREE.PlaneGeometry(HW * 0.45, HW * 0.45).rotateX(-Math.PI / 2);
+    var chevGeo = new THREE.PlaneGeometry(46, 46).rotateX(-Math.PI / 2);
     for (var ci = 15; ci < N; ci += 25) {
       var cp = pts[ci];
       var ctg = curve.getTangentAt((ci / N) % 1);
@@ -445,7 +452,7 @@
     R.roadGroup.add(ground);
     var cps = track.checkpoints;
     var asphalt = makeAsphaltMaterial();
-    var roadWidth = (track.roadHalfWidth || 92) * 2;
+    var roadWidth = (track.roadHalfWidth || 184) * 2;
     for (var i = 0; i < cps.length; i++) {
       var a = cps[i], b = cps[(i + 1) % cps.length];
       var dx = b.x - a.x, dz = -(b.y - a.y);

@@ -1226,3 +1226,31 @@ controlador móvil ni el contrato `track_data`. El rendimiento a 30 Hz con
 **Riesgos / pendiente:**
 - El botón `#btn-race-abort` solo es visible para el host (pantalla principal). Los espectadores futuros o co-administradores no tienen acceso; si se añaden roles, habrá que extender `validateHostSeat`.
 - El diálogo de confirmación es nativo (`window.confirm`); en móvil puede quedar bloqueado por el modo pantalla completa en algunos navegadores.
+
+### Tarea 19: Cuatro carriles en las pistas (duplicación de ancho con carriles idénticos)
+
+**Objetivo:** Añadir dos carriles adicionales a las pistas de carreras manteniendo exactamente las mismas dimensiones que poseía cada carril original (ancho de 92 px por carril, total 4 carriles = 368 px de calzada).
+
+**Detalles de la implementación:**
+1. **Dimensiones y geometría de pista (`shared/constants.js`):**
+   - Se actualizó el semiancho físico y visual: `ROAD_HALF_WIDTH: 184` y `TRACK_RENDER_HALF_WIDTH: 184` (ancho total de calzada $2 \times 184 = 368$ px).
+   - Se amplió `CHECKPOINT_RADIUS: 200` para garantizar que los vehículos que circulan por los carriles exteriores registren sus checkpoints sin penalización.
+2. **Renderizado 3D Arcade (`client/js/threeGameRenderer.js`):**
+   - En `buildArcadeTrack(track)` se dibujan 3 líneas divisorias discontinuas en lugar de 1 sola central:
+     - Divisoria carril 1-2: offset lateral `-HW * 0.5` (-92 px).
+     - Divisoria central carril 2-3: offset lateral `0` px.
+     - Divisoria carril 3-4: offset lateral `+HW * 0.5` (+92 px).
+   - Se preservó el ancho individual de cada carril en 92 px exactos.
+   - La línea de meta, el arco de llegada y los pianos/kerbs se adaptan automáticamente al semiancho $HW=184$ px.
+   - Las flechas direccionales chevrons se dimensionaron a $46 \times 46$ px para encajar de manera proporcionada en la calzada.
+3. **Parrilla de salida autoritativa (`server/TrackGenerator.js`):**
+   - Se ajustó el espaciado lateral de los 4 monoplazas por fila a `(col - 1.5) * 72`, distribuyendo los vehículos centrados en cada uno de los 4 carriles (offsets aproximados: -108, -34, +34, +108 px).
+4. **Separación de curvas y bordes sin solapamiento (`server/TrackGenerator.js` y `shared/constants.js`):**
+   - Al duplicar el ancho del trazado a 368 px (semiancho 184 px + pianos 14 px = 198 px hacia cada extremo), las curvas en horquilla o tramos paralelos requerían una separación mínima entre líneas centrales de al menos $198 \times 2 = 396$ px para evitar que los bordes y pianos se tocaran o solaparan.
+   - Se ajustó la escala del trazado a `TRACK_LENGTH_SCALE: 1.8` para escalar proporcionalmente las pistas al nuevo ancho de 4 carriles.
+   - En `separateCloseSegments(scaledRaw, 450, 30)`, se incrementó `minSeparation` de 212 px a 450 px con repulsión calibrada y suavizado laplaciano, garantizando un colchón de césped limpio entre bordes de cualquier curva cerrada o tramo paralelo adyacente.
+5. **Sistema de items y herramientas de validación:**
+   - Sincronizados los valores por defecto en `server/ItemSystem.js`, `tools/verify-tracks.js`, `tools/verify-items.js`, `tools/verify-items-bounds.js`, `tools/verify-direction.js` y `tools/verify-championship.js`.
+   - Se actualizaron las versiones de script a `constants.js?v=11` y `threeGameRenderer.js?v=23` en `client/index.html` y `client/join.html` para invalidar la caché del navegador.
+
+**Verificación:** `npm test` completo (11/11 suites PASS, incluyendo los 441 680 tests de colisión en las 40 pistas, navegación de bots y paso por gates de meta en todos los carriles).

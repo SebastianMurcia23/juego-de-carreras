@@ -11,8 +11,8 @@ const tracks = require('../config/tracks');
 const geo = require('../config/tracks-geo.json');
 const { generateTrack } = require('../server/TrackGenerator');
 
-const ROAD_HALF_WIDTH = 92;           // must match PHY.ROAD_HALF_WIDTH in shared/constants.js
-const SCENERY_ROAD_HALF_WIDTH = 92;
+const ROAD_HALF_WIDTH = 184;           // must match PHY.ROAD_HALF_WIDTH in shared/constants.js
+const SCENERY_ROAD_HALF_WIDTH = 184;
 const SCENERY_MARGIN = 60;
 const SCENERY_DIR = path.join(__dirname, '..', 'config', 'scenery');
 const START_LATERAL_LIMIT = ROAD_HALF_WIDTH * 2.15;

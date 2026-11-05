@@ -197,14 +197,14 @@ SHARED.PHYSICS = {
   RESPAWN_INVULN_MS: 2000,
 
   // Track
-  // TRACK_WIDTH_SCALE: factor to scale all road widths at once. 1.0 = default (92 px half-width).
+  // TRACK_WIDTH_SCALE: factor to scale all road widths at once. 1.0 = default (184 px half-width / 4 lanes of 92 px).
   // To widen further: raise TRACK_WIDTH_SCALE and ROAD_HALF_WIDTH together.
   TRACK_WIDTH_SCALE:       1.0,
-  ROAD_HALF_WIDTH:         92,  // physical collision margin — now matches the visual render width
-  TRACK_RENDER_HALF_WIDTH: 92,  // four visual lanes, each 46 px wide (sync with ROAD_HALF_WIDTH)
-  TRACK_LENGTH_SCALE: 1.15,     // longer circuits without changing handling scale
+  ROAD_HALF_WIDTH:         184, // physical collision margin — matches visual render width (4 lanes of 92 px each)
+  TRACK_RENDER_HALF_WIDTH: 184, // four visual lanes, each 92 px wide (sync with ROAD_HALF_WIDTH)
+  TRACK_LENGTH_SCALE: 1.8,      // scaled circuit layout proportionally for 4-lane width
   TRACK_LANE_COUNT: 4,
-  CHECKPOINT_RADIUS: 105,       // radius to "pass" a checkpoint (scaled for 92 px road half-width)
+  CHECKPOINT_RADIUS: 200,       // radius to "pass" a checkpoint (scaled for 184 px road half-width)
 
   // Stage 6: Pickups & Boost Pads
   BOOST_PAD_FORCE:       260,   // forward velocity boost (px/s)

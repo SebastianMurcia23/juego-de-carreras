@@ -50,7 +50,7 @@ const dt = 1 / 30;
 for (const trackDef of tracksToTest) {
   stats.tracksTested++;
   const track = generateTrack(trackDef, 4);
-  const roadHW = track.roadHalfWidth || 92;
+  const roadHW = track.roadHalfWidth || 184;
   const cps = track.checkpoints;
 
   const cars = new Map();

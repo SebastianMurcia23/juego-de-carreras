@@ -117,7 +117,7 @@ class ItemSystem {
 
     // Pre-computed
     this.cps = track.checkpoints || [];
-    this.roadHW = (track.roadHalfWidth || 92);    // px
+    this.roadHW = (track.roadHalfWidth || SHARED.PHYSICS.ROAD_HALF_WIDTH || 184);    // px
     this.L = 65;    // default car length in px; updated in initBoxes
     this.V = 450;   // fastest maxSpeed, updated when cars are registered
 
