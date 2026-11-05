@@ -1010,22 +1010,20 @@ function drawCars(ctx) {
       ctx.restore();
     }
 
-    // Name tag
+    // Name tag & Position pill
     ctx.save();
     ctx.translate(car.x, car.y);
-    ctx.fillStyle = isLocal ? '#00f5d4' : '#ffffffaa';
+    var tagText = (car.pos ? ('P' + car.pos + ' · ') : '') + (car.nm || 'Piloto');
     ctx.font = 'bold 10px sans-serif';
+    var tw = ctx.measureText(tagText).width + 12;
+    ctx.fillStyle = isLocal ? 'rgba(7, 16, 29, 0.92)' : 'rgba(10, 15, 26, 0.85)';
+    ctx.fillRect(-tw / 2, -42, tw, 18);
+    ctx.strokeStyle = isLocal ? '#00f5d4' : (car.pos === 1 ? '#ffd700aa' : 'rgba(255, 255, 255, 0.3)');
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-tw / 2, -42, tw, 18);
+    ctx.fillStyle = isLocal ? '#00f5d4' : (car.pos === 1 ? '#ffd700' : '#ffffff');
     ctx.textAlign = 'center';
-    ctx.fillText(car.nm, 0, -32);
-
-    // Position badge
-    if (car.pos) {
-      ctx.fillStyle = '#0a0d14cc';
-      ctx.fillRect(-10, -48, 20, 14);
-      ctx.fillStyle = car.pos === 1 ? '#ffd700' : car.pos === 2 ? '#c0c0c0' : car.pos === 3 ? '#cd7f32' : '#ffffff88';
-      ctx.font = 'bold 11px sans-serif';
-      ctx.fillText('P' + car.pos, 0, -37);
-    }
+    ctx.fillText(tagText, 0, -29);
 
     // Health bar
     if (!car.fin) {
@@ -1532,6 +1530,16 @@ function drawMiniMap(ctx, W, H) {
   drawLeaderboard(ctx, W, H);
 }
 
+function formatTimeMs(ms) {
+  if (ms == null || isNaN(ms) || ms <= 0) return '0:00.0';
+  var sec = ms / 1000;
+  var m = Math.floor(sec / 60);
+  var s = Math.floor(sec % 60);
+  var tenths = Math.floor((sec * 10) % 10);
+  var sStr = (s < 10 && m > 0 ? '0' : '') + s;
+  return (m > 0 ? (m + ':' + sStr) : sStr) + '.' + tenths + 's';
+}
+
 function drawLeaderboard(ctx, W, H) {
   if (!GR.gameState || !Array.isArray(GR.gameState.cars)) return;
 
@@ -1550,25 +1558,31 @@ function drawLeaderboard(ctx, W, H) {
   ctx.fillStyle = '#00f5d4';
   ctx.font = 'bold ' + (11 * dpr) + 'px sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText('CLASIFICACIÓN', panelX + 10 * dpr, panelY + 16 * dpr);
+  ctx.fillText('POSICIONES', panelX + 10 * dpr, panelY + 16 * dpr);
+
+  var currentRaceTime = GR.gameState.raceTime || (GR.gameState.elapsedTime ? Math.round(GR.gameState.elapsedTime * 1000) : 0);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#ffffff88';
+  ctx.font = (9 * dpr) + 'px monospace';
+  ctx.fillText(formatTimeMs(currentRaceTime), panelX + panelWidth - 10 * dpr, panelY + 16 * dpr);
 
   for (var i = 0; i < visibleCars.length; i++) {
     var car = visibleCars[i];
     var rowY = panelY + (31 + i * 20) * dpr;
     var isLocal = car.st === GR.localSeat;
     var positionColor = i === 0 ? '#ffd700' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : '#ffffffaa';
-    var name = String(car.nm || 'Piloto').substring(0, 14);
+    var name = String(car.nm || 'Piloto').substring(0, 10);
 
     ctx.fillStyle = isLocal ? '#00f5d4' : positionColor;
     ctx.font = 'bold ' + (10 * dpr) + 'px sans-serif';
-    ctx.fillText((i + 1) + '. ' + name, panelX + 10 * dpr, rowY);
+    ctx.textAlign = 'left';
+    ctx.fillText((car.pos || (i + 1)) + 'º ' + name, panelX + 10 * dpr, rowY);
 
     ctx.textAlign = 'right';
-    ctx.fillStyle = isLocal ? '#ffffff' : '#ffffffaa';
-    ctx.font = (9 * dpr) + 'px sans-serif';
-    ctx.fillText(car.fin ? 'LLEGÓ P' + car.fp : 'V' +
-      Math.min(GR.gameState.laps || 3, (car.lap || 0) + 1) +
-      '  ' + (car.pts || 0) + ' pts', panelX + panelWidth - 10 * dpr, rowY);
+    ctx.fillStyle = isLocal ? '#00f5d4' : '#ffffffaa';
+    ctx.font = (9 * dpr) + 'px monospace';
+    var timeStr = car.fin ? (formatTimeMs(car.ft || car.time || currentRaceTime) + ' 🏁') : formatTimeMs(currentRaceTime);
+    ctx.fillText(timeStr, panelX + panelWidth - 10 * dpr, rowY);
     ctx.textAlign = 'left';
   }
   if (GR.arrivals.length) {

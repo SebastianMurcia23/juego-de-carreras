@@ -1181,3 +1181,18 @@ controlador móvil ni el contrato `track_data`. El rendimiento a 30 Hz con
 - `node tools/verify-controller-layout.js`: PASS.
 - `node tools/verify-controller-state.js`: PASS.
 - `npm test`: 10/10 suites PASS (incluyendo 40/40 circuitos en `verify-bounds`, `verify-bots`, `verify-tracks`, etc.).
+
+### Tarea 17: Nombres sobre los vehículos y tabla de posiciones compacta bajo el minimapa
+
+**Objetivo:** mostrar los nombres de los jugadores en 3D encima de cada carro durante la carrera y agregar una tabla de posiciones compacta debajo del minimapa que indique la posición actual, el nombre de cada piloto y los tiempos en vivo o finales.
+
+**Archivos modificados:**
+
+| Archivo | Cambio |
+|---|---|
+| `server/GameRoom.js` | En `_broadcastState()`: se incluye `ft` (tiempo final en ms) en cada carro y `elapsedTime` y `raceTime` en el payload de `EV.GAME_STATE` para sincronizar los tiempos autoritativos con el renderizador del cliente. |
+| `client/js/threeGameRenderer.js` | Función `drawCarNameTags()`: proyecta la posición 3D sobre la cabeza de cada piloto al canvas 2D del HUD, dibujando una pastilla estilizada con badge de posición (`P1`), nombre del jugador (resaltado en cian si es local, oro si es líder), puntero inferior y desvanecimiento suave por distancia. Función `drawLeaderboard()`: colocada inmediatamente debajo del minimapa, lista a los pilotos ordenados por posición con su nombre, badge de podio, indicador local y tiempos de carrera en vivo (o tiempo final congelado con 🏁). |
+| `client/js/gameRenderer.js` | Se actualizó el fallback 2D con la misma pastilla de nombre y posición (`P1 · Nombre`) sobre el carro y se agregó la columna de tiempos en vivo/llegada a su panel de posiciones. |
+| `client/index.html` | Se actualizaron las versiones de script a `gameRenderer.js?v=8` y `threeGameRenderer.js?v=20` para invalidar la caché del navegador. |
+
+**Verificación:** `npm test` completo (10/10 suites PASS, incluyendo los 441 680 tests de límites en las 40 pistas).

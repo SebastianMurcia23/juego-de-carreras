@@ -1618,7 +1618,9 @@
     }
 
     ctx.textAlign = 'left';
+    drawCarNameTags(ctx, local);
     drawMiniMap(ctx, local);
+    drawLeaderboard(ctx, local);
 
     // Countdown
     var remain = Math.ceil((R.countdownEnd - Date.now()) / 1000);
@@ -1730,6 +1732,190 @@
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 10px sans-serif';
     ctx.fillText('MAPA', x + 8, y + size - 7);
+  }
+
+  function formatRaceTime(ms) {
+    if (ms == null || isNaN(ms) || ms <= 0) return '0:00.0';
+    var sec = ms / 1000;
+    var m = Math.floor(sec / 60);
+    var s = Math.floor(sec % 60);
+    var tenths = Math.floor((sec * 10) % 10);
+    var sStr = (s < 10 && m > 0 ? '0' : '') + s;
+    return (m > 0 ? (m + ':' + sStr) : sStr) + '.' + tenths + 's';
+  }
+
+  /* ── Leaderboard under Minimap ────────────────────────────────────────── */
+  function drawLeaderboard(ctx, local) {
+    if (!R.state || !R.state.cars || !R.state.cars.length) return;
+    var cars = R.state.cars.slice();
+    // Sort by race position
+    cars.sort(function(a, b) { return (a.pos || 99) - (b.pos || 99); });
+
+    var mapSize = Math.min(150, innerWidth * 0.24);
+    var mapY = ARCADE ? 82 : 72;
+    var lbY = mapY + mapSize + 8;
+    var lbW = Math.max(176, mapSize);
+    var lbX = innerWidth - lbW - 18;
+
+    var maxRows = Math.min(cars.length, Math.floor((innerHeight - lbY - 24) / 19));
+    if (maxRows <= 0) return;
+
+    var rowH = 19;
+    var headerH = 22;
+    var totalH = headerH + maxRows * rowH + 4;
+
+    ctx.save();
+    // Card Background
+    ctx.fillStyle = 'rgba(7, 16, 29, 0.88)';
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(lbX, lbY, lbW, totalH, 6);
+    else ctx.rect(lbX, lbY, lbW, totalH);
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff20';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Header
+    ctx.fillStyle = '#00f5d4';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('POSICIONES', lbX + 8, lbY + 15);
+
+    var currentRaceTime = R.state.raceTime || (R.state.elapsedTime ? Math.round(R.state.elapsedTime * 1000) : 0);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#ffffff88';
+    ctx.font = '9px monospace';
+    ctx.fillText(formatRaceTime(currentRaceTime), lbX + lbW - 8, lbY + 15);
+
+    // Rows
+    for (var i = 0; i < maxRows; i++) {
+      var car = cars[i];
+      var isMe = local && (car.st === local.st);
+      var rowY = lbY + headerH + i * rowH;
+
+      // Highlight local player
+      if (isMe) {
+        ctx.fillStyle = 'rgba(0, 245, 212, 0.16)';
+        ctx.fillRect(lbX + 2, rowY, lbW - 4, rowH - 1);
+        ctx.fillStyle = '#00f5d4';
+        ctx.fillRect(lbX + 2, rowY, 2.5, rowH - 1);
+      }
+
+      // Position
+      var posNum = car.pos || (i + 1);
+      var posColor = posNum === 1 ? '#ffd700' : posNum === 2 ? '#e2e8f0' : posNum === 3 ? '#cd7f32' : '#94a3b8';
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.fillStyle = posColor;
+      ctx.fillText(posNum + 'º', lbX + 7, rowY + 13);
+
+      // Name
+      ctx.font = isMe ? 'bold 10px sans-serif' : '10px sans-serif';
+      ctx.fillStyle = isMe ? '#00f5d4' : '#ffffff';
+      var rawName = String(car.nm || 'Piloto');
+      var maxChars = lbW > 180 ? 10 : 8;
+      var displayName = rawName.length > maxChars ? (rawName.substring(0, maxChars - 1) + '…') : rawName;
+      ctx.fillText(displayName, lbX + 28, rowY + 13);
+
+      // Time
+      ctx.textAlign = 'right';
+      ctx.font = '10px monospace';
+      if (car.fin) {
+        ctx.fillStyle = '#00f5d4';
+        ctx.fillText(formatRaceTime(car.ft || car.time || currentRaceTime) + ' 🏁', lbX + lbW - 7, rowY + 13);
+      } else {
+        ctx.fillStyle = isMe ? '#ffffff' : '#ffffffaa';
+        ctx.fillText(formatRaceTime(currentRaceTime), lbX + lbW - 7, rowY + 13);
+      }
+    }
+
+    ctx.restore();
+  }
+
+  /* ── 3D Overhead Name Tags projected onto 2D HUD ──────────────────────── */
+  var _tagProj = new THREE.Vector3();
+  function drawCarNameTags(ctx, local) {
+    if (!R.state || !R.state.cars || !R.camera) return;
+    var cars = R.state.cars;
+    ctx.save();
+
+    for (var i = 0; i < cars.length; i++) {
+      var data = cars[i];
+      if (!data.alive && !data.fin) continue;
+
+      var group = R.cars[data.st];
+      if (!group || !group.visible) continue;
+
+      var kD = group.userData.kD || 21.67;
+      // Head position in 3D (above cockpit / halo)
+      _tagProj.set(group.position.x, group.position.y + kD * 0.75 + 5, group.position.z);
+      _tagProj.project(R.camera);
+
+      // Clip if behind camera
+      if (_tagProj.z <= 0 || _tagProj.z >= 1) continue;
+
+      var sx = (_tagProj.x * 0.5 + 0.5) * innerWidth;
+      var sy = (-(_tagProj.y * 0.5) + 0.5) * innerHeight;
+
+      if (sx < -50 || sx > innerWidth + 50 || sy < -30 || sy > innerHeight + 50) continue;
+
+      var dist = R.camera.position.distanceTo(group.position);
+      if (dist > 2400) continue;
+
+      var isMe = local && (data.st === local.st);
+      var name = String(data.nm || 'Piloto');
+      var pos = data.pos ? ('P' + data.pos) : '';
+
+      // Distance fade
+      var alpha = dist < 1200 ? 1 : Math.max(0.2, 1 - (dist - 1200) / 1200);
+      ctx.globalAlpha = alpha;
+
+      ctx.font = 'bold 11px sans-serif';
+      var nameW = ctx.measureText(name).width;
+      var posW = pos ? (ctx.measureText(pos).width + 6) : 0;
+      var pillW = posW + nameW + 16;
+      var pillH = 20;
+      var pillX = sx - pillW / 2;
+      var pillY = sy - pillH - 6;
+
+      // Background
+      ctx.fillStyle = isMe ? 'rgba(7, 16, 29, 0.94)' : 'rgba(10, 15, 26, 0.86)';
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(pillX, pillY, pillW, pillH, 5);
+      else ctx.rect(pillX, pillY, pillW, pillH);
+      ctx.fill();
+
+      // Border
+      ctx.strokeStyle = isMe ? '#00f5d4' : (data.pos === 1 ? '#ffd700aa' : 'rgba(255, 255, 255, 0.28)');
+      ctx.lineWidth = isMe ? 1.5 : 1;
+      ctx.stroke();
+
+      // Downward pointer
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.beginPath();
+      ctx.moveTo(sx - 3, pillY + pillH);
+      ctx.lineTo(sx + 3, pillY + pillH);
+      ctx.lineTo(sx, pillY + pillH + 4);
+      ctx.closePath();
+      ctx.fill();
+
+      // Position
+      var textX = pillX + 6;
+      if (pos) {
+        var posColor = data.pos === 1 ? '#ffd700' : data.pos === 2 ? '#e2e8f0' : data.pos === 3 ? '#cd7f32' : '#38bdf8';
+        ctx.fillStyle = posColor;
+        ctx.textAlign = 'left';
+        ctx.fillText(pos, textX, pillY + 14);
+        textX += posW;
+      }
+
+      // Name
+      ctx.fillStyle = isMe ? '#00f5d4' : '#ffffff';
+      ctx.textAlign = 'left';
+      ctx.fillText(name, textX, pillY + 14);
+    }
+
+    ctx.restore();
   }
 
   function drawResultsOverlay(ctx, W, H) {
