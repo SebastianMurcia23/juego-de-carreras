@@ -1130,6 +1130,20 @@ cobertura deficiente en uniones entre segmentos.
   championship, laps, direction, controller-state, controller-layout, bounds).
 
 **Restricciones respetadas:** no se modificó `ItemSystem.js`,
-`TrackGenerator.js`, reglas de puntuación, flujo de campeonato, lobby,
+reglas de puntuación, flujo de campeonato, lobby,
 controlador móvil ni el contrato `track_data`. El rendimiento a 30 Hz con
 12 carros en las 40 pistas no se ve afectado gracias a la ventana local.
+
+### Tarea 14: Espera del último jugador para finalizar la carrera
+
+**Objetivo:** asegurar que la carrera no se corte por timeout tras la llegada del ganador (P1), permitiendo que todos los jugadores activos (hasta el último) completen todas sus vueltas y crucen la meta.
+
+**Causa raíz:** `GameRoom.js` aplicaba por defecto `finishTimeoutSeconds || 45`, lo que activaba una cuenta atrás forzada de 45 segundos tras cruzar P1 la meta y marcaba DNF a los jugadores que aún estaban en carrera.
+
+**Archivos modificados:**
+
+| Archivo | Cambio |
+|---|---|
+| `server/GameRoom.js` | En `_checkCheckpoints`: cuando P1 cruza la meta, no se activa cuenta atrás forzada ni `RACE_COUNTDOWN_FINISH` a menos que esté explícitamente configurado `finishTimeoutSeconds > 0`. En `_checkRaceEnd`: la carrera solo finaliza cuando `allFinished === true` (todos los jugadores activos cruzaron la meta), registrando los puestos y tiempos reales de todos sin DNF prematuro. |
+
+**Verificación:** prueba unitaria de 2 jugadores con P1 terminado y simulación de 60 s continuando normalmente hasta la llegada de P2; `npm test` completo en verde (10/10 suites).

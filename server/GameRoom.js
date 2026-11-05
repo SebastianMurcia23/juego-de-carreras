@@ -1257,17 +1257,22 @@ class GameRoom {
             powerHits: car.arcadeItemHitBonus || 0,
           });
 
-          // If this is the 1st car across the line, start countdown for remaining players
+          // If this is the 1st car across the line, record tick/time
           if (this.firstFinishedTick == null) {
             this.firstFinishedTick = this.tickCount;
             this.firstFinishedTime = this.elapsedTime;
             this.firstFinishedWallTime = Date.now();
-            const timeoutSec = this.settings.finishTimeoutSeconds || 45;
-            this.io.to(this.roomCode).emit(EV.RACE_COUNTDOWN_FINISH, {
-              seconds: timeoutSec,
-              firstPlaceName: car.name,
-            });
-            console.log(`[game] ${car.name} finished P1! DNF countdown: ${timeoutSec}s`);
+            const hasExplicitTimeout = Number.isFinite(this.settings.finishTimeoutSeconds) && this.settings.finishTimeoutSeconds > 0;
+            if (hasExplicitTimeout) {
+              const timeoutSec = this.settings.finishTimeoutSeconds;
+              this.io.to(this.roomCode).emit(EV.RACE_COUNTDOWN_FINISH, {
+                seconds: timeoutSec,
+                firstPlaceName: car.name,
+              });
+              console.log(`[game] ${car.name} finished P1! DNF countdown: ${timeoutSec}s`);
+            } else {
+              console.log(`[game] ${car.name} finished P1! Waiting for all players to complete the race.`);
+            }
           }
 
           this.io.to(this.roomCode).emit(EV.CAR_FINISHED, {
@@ -1627,9 +1632,10 @@ class GameRoom {
     if (activeCars.length === 0) return;
 
     const allFinished = activeCars.every(c => c.finished);
-    const timeoutSec = this.settings.finishTimeoutSeconds || 45;
-    const timeoutTicks = Math.round(timeoutSec * PHY.TICK_RATE_HZ);
-    const timeoutExpired = this.firstFinishedTick != null && (
+    const hasExplicitTimeout = Number.isFinite(this.settings.finishTimeoutSeconds) && this.settings.finishTimeoutSeconds > 0;
+    const timeoutSec = hasExplicitTimeout ? this.settings.finishTimeoutSeconds : null;
+    const timeoutTicks = timeoutSec ? Math.round(timeoutSec * PHY.TICK_RATE_HZ) : null;
+    const timeoutExpired = hasExplicitTimeout && this.firstFinishedTick != null && (
       (this.tickCount - this.firstFinishedTick >= timeoutTicks) ||
       (this.elapsedTime - this.firstFinishedTime >= timeoutSec) ||
       (this.firstFinishedWallTime && Date.now() - this.firstFinishedWallTime >= timeoutSec * 1000)
