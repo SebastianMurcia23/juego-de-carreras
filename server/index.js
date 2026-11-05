@@ -4,23 +4,23 @@
  */
 'use strict';
 
-const express     = require('express');
-const http        = require('http');
-const { Server }  = require('socket.io');
-const path        = require('path');
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const path = require('path');
 const RoomManager = require('./RoomManager');
 const ProductManager = require('./ProductManager');
-const SHARED      = require('../shared/constants');
+const SHARED = require('../shared/constants');
 
 const EV = SHARED.EVENTS;
 
 /* ─── App setup ─────────────────────────────────────────────────────────── */
-const app    = express();
+const app = express();
 const server = http.createServer(app);
-const io     = new Server(server, {
+const io = new Server(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] },
   // Increase ping timeout to handle flaky mobile connections
-  pingTimeout:  20000,
+  pingTimeout: 20000,
   pingInterval: 10000,
 });
 
@@ -107,7 +107,7 @@ io.on('connection', (socket) => {
   /* ── Join room (guest computer) ───────────────────────────────────────── */
   socket.on(EV.JOIN_ROOM, async ({ code } = {}) => {
     try {
-      const upper  = (code || '').toUpperCase();
+      const upper = (code || '').toUpperCase();
       const result = await rooms.joinRoom(upper, id);
 
       if (result.error === 'ROOM_NOT_FOUND') {
@@ -148,12 +148,12 @@ io.on('connection', (socket) => {
       } else {
         // Confirm to the mobile
         socket.emit(EV.SEAT_LINKED, {
-          success:   true,
-          name:      result.name,
-          isHost:    result.isHost,
-          carId:     result.carId,
-          weaponId:  result.weaponId,
-          isReady:   result.isReady,
+          success: true,
+          name: result.name,
+          isHost: result.isHost,
+          carId: result.carId,
+          weaponId: result.weaponId,
+          isReady: result.isReady,
           roomState: result.roomState,
         });
         console.log(`[seat] Mobile ${id} linked to ${result.roomCode}`);
@@ -203,13 +203,13 @@ io.on('connection', (socket) => {
         socket.emit(EV.ERROR, { message: 'No se pudo reconectar el control.' });
       } else {
         socket.emit(EV.SEAT_LINKED, {
-          success:     true,
-          name:        result.name,
-          isHost:      result.isHost,
-          carId:       result.carId,
-          weaponId:    result.weaponId,
-          isReady:     result.isReady,
-          roomState:   result.roomState,
+          success: true,
+          name: result.name,
+          isHost: result.isHost,
+          carId: result.carId,
+          weaponId: result.weaponId,
+          isReady: result.isReady,
+          roomState: result.roomState,
           reconnected: true,
         });
 
@@ -323,6 +323,21 @@ io.on('connection', (socket) => {
     }
   });
 
+  /* ── Stage 2: Admin return to lobby / abort active race ──────────────── */
+  socket.on(EV.RETURN_TO_LOBBY, (data = {}) => {
+    try {
+      const code = data.roomCode ? data.roomCode.toUpperCase() : (data.seatToken ? rooms.getRoomCodeBySeat(data.seatToken) : '');
+      const hostToken = data.hostToken || null;
+      const seatToken = data.seatToken || null;
+      const res = rooms.returnToLobby(code, hostToken, seatToken);
+      if (res && res.error) {
+        socket.emit(EV.ERROR, { message: res.error === 'UNAUTHORIZED' ? 'Solo el anfitrión puede regresar al menú.' : res.error });
+      }
+    } catch (e) {
+      console.error('[return_to_lobby]', e);
+    }
+  });
+
   /* ── Controller input (Stage 3) ──────────────────────────────────────── */
   socket.on(EV.CONTROLLER_INPUT, (data) => {
     if (!data || !data.seatToken || !data.inputs) return;
@@ -373,9 +388,9 @@ io.on('connection', (socket) => {
 
 /* ─── Start ─────────────────────────────────────────────────────────────── */
 const PORT = parseInt(process.env.PORT || '3000', 10);
-const os   = require('os');
+const os = require('os');
 const https = require('https');
-const fs    = require('fs');
+const fs = require('fs');
 
 function getLanIp() {
   const nets = os.networkInterfaces();
@@ -406,12 +421,12 @@ server.listen(PORT, () => {
 
 // Start secondary HTTPS server (for mobile secure context gyroscope support)
 const certPath = path.join(__dirname, '..', 'cert.pem');
-const keyPath  = path.join(__dirname, '..', 'key.pem');
+const keyPath = path.join(__dirname, '..', 'key.pem');
 
 if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
   try {
     const cert = fs.readFileSync(certPath);
-    const key  = fs.readFileSync(keyPath);
+    const key = fs.readFileSync(keyPath);
     const httpsServer = https.createServer({ key, cert }, app);
     io.attach(httpsServer);
     const HTTPS_PORT = parseInt(process.env.HTTPS_PORT || '3443', 10);
@@ -419,7 +434,7 @@ if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
       console.log(`    🔒 HTTPS Seguro →  https://${lanIp}:${HTTPS_PORT} (Permite giroscopio móvil)`);
       console.log();
     });
-  } catch(e) {
+  } catch (e) {
     console.warn('[https] Could not start https server:', e.message);
   }
 }

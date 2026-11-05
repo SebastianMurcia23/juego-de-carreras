@@ -56,6 +56,7 @@ var EV = (window.SHARED && window.SHARED.EVENTS) ? window.SHARED.EVENTS : {
   RACE_FINISHED:       'race_finished',
   TRACK_DATA:          'track_data',
   PLAYER_ELIMINATED:   'player_eliminated',
+  RETURN_TO_LOBBY:     'return_to_lobby',
   ERROR:               'error'
 };
 
@@ -204,12 +205,44 @@ function initSocket() {
   });
 
   S.socket.on(EV.GAME_STARTING, function(data) {
+    var ap = $('admin-panel');
+    if (ap) ap.classList.remove('open');
     var cds = data.countdownSeconds || 3;
     var track = findTrack(data.trackId);
     toast('🏁 ¡CARRERA EN ' + cds + 's! Pista: ' + (track ? track.name : ''), 'success', 6000);
     showState('race');
     if (window.GAME_RENDERER) {
       window.GAME_RENDERER.init('race-canvas', S.seatToken);
+    }
+  });
+
+  S.socket.on(EV.RETURN_TO_LOBBY, function(data) {
+    toast(data && data.message ? data.message : 'Carrera finalizada. De vuelta al menú principal.', 'info', 4000);
+    // Close admin panel drawer if open
+    var ap = $('admin-panel');
+    if (ap) ap.classList.remove('open');
+    // Stop the renderer if running
+    if (window.GAME_RENDERER && window.GAME_RENDERER.stop) {
+      window.GAME_RENDERER.stop();
+    }
+    // Go back to lobby UI
+    showState('lobby');
+    // Reset local ready state so the player can start again
+    S.isReady = false;
+    S.readyPending = false;
+    updateReadyButton();
+    // Re-enable start button in case it was disabled
+    var btnStart = $('btn-start-game');
+    if (btnStart) {
+      btnStart.disabled = false;
+      btnStart.textContent = '🚀 ¡INICIAR CARRERA!';
+    }
+    // Restore loadout section visibility if host was linked
+    if (S.seatToken) {
+      var qrSec = $('host-qr-section');
+      var loadoutSec = $('host-loadout-section');
+      if (qrSec) qrSec.classList.add('hidden');
+      if (loadoutSec) loadoutSec.classList.remove('hidden');
     }
   });
 
@@ -355,6 +388,12 @@ function initSocket() {
     toast((data && data.message) || 'Error del servidor', 'error');
     S.readyPending = false;
     updateReadyButton();
+    // Re-enable start button if it was disabled by handleStartGame
+    var btnStart = $('btn-start-game');
+    if (btnStart && btnStart.disabled) {
+      btnStart.disabled = false;
+      btnStart.textContent = '🚀 ¡INICIAR CARRERA!';
+    }
     if (S.phase === 'creating') {
       showState('landing');
       var b = $('btn-create');
@@ -940,6 +979,8 @@ function updateAdminSettings() {
 
 function handleStartGame() {
   if (!S.socket || !S.hostToken) return;
+  var ap = $('admin-panel');
+  if (ap) ap.classList.remove('open');
   var unready = [];
   for (var i = 0; i < S.players.length; i++) {
     if (!S.players[i].isReady && S.players[i].name) unready.push(S.players[i].name);
@@ -950,6 +991,12 @@ function handleStartGame() {
   var btn = $('btn-start-game');
   if (btn) { btn.disabled = true; btn.textContent = 'INICIANDO...'; }
   S.socket.emit(EV.START_GAME, { roomCode: S.roomCode, hostToken: S.hostToken });
+}
+
+function handleReturnToLobby() {
+  if (!S.socket || !S.roomCode || !S.hostToken) return;
+  if (!confirm('¿Terminar la carrera actual y volver al menú principal para que todos seleccionen vehículos?')) return;
+  S.socket.emit(EV.RETURN_TO_LOBBY, { roomCode: S.roomCode, hostToken: S.hostToken });
 }
 
 /* --------------------------------------------------- wire buttons */
@@ -1008,6 +1055,18 @@ function wireButtons() {
 
   var btnStart = $('btn-start-game');
   if (btnStart) btnStart.addEventListener('click', handleStartGame);
+
+  var btnRaceAbort = $('btn-race-abort');
+  if (btnRaceAbort) btnRaceAbort.addEventListener('click', handleReturnToLobby);
+
+  var btnAdminReturn = $('btn-admin-return-lobby');
+  if (btnAdminReturn) btnAdminReturn.addEventListener('click', handleReturnToLobby);
+
+  window.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && S.phase === 'race') {
+      handleReturnToLobby();
+    }
+  });
 }
 
 /* ---------------------------------------------------------------- boot */

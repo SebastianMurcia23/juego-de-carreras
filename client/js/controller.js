@@ -275,6 +275,7 @@ function toggleMobileReady() {
     S.isReady = true;
     updateConfirmationUI();
     if (S.socket && S.seatToken) {
+      S.socket.emit(EV.TOGGLE_READY, { seatToken: S.seatToken, isReady: true, name });
     }
     toast('✓ ¡Vehículo confirmado!', 'success', 2000);
   } else {
@@ -287,6 +288,7 @@ function unlockMobileVehicle() {
   S.isReady = false;
   updateConfirmationUI();
   if (S.socket && S.seatToken) {
+    S.socket.emit(EV.TOGGLE_READY, { seatToken: S.seatToken, isReady: false, name: S.playerName });
   }
   toast('Vehículo desbloqueado. Puedes cambiarlo.', 'info', 1800);
 }
@@ -297,7 +299,12 @@ function syncLoadoutToServer(optName) {
   if (!car) return;
   const ARCADE = Boolean(window.ROAD_RUMBLE_FLAGS && window.ROAD_RUMBLE_FLAGS.ARCADE_ITEMS !== false);
   const name = optName || ($('ctrl-input-nickname')?.value || S.playerName || '').trim();
-
+  S.socket.emit(EV.SELECT_LOADOUT, {
+    seatToken: S.seatToken,
+    carId: car.id,
+    weaponId: ARCADE ? null : S.selectedWeaponId,
+    name: name || S.playerName || 'Piloto',
+  });
 }
 
 /* ─── DeviceOrientation & Motion Gyroscope ───────────────────────────────── */
@@ -765,6 +772,7 @@ function initSocket() {
 
     S.playerName = name || 'Piloto 1';
     S.isHost     = isHost;
+    if (S.isHost) $('btn-host-abort')?.classList.remove('hidden');
     if (isReady != null) S.isReady = Boolean(isReady);
 
     if (carId) {
@@ -826,6 +834,35 @@ function initSocket() {
     const resultsOverlay = $('ctrl-results-overlay');
     if (resultsOverlay) resultsOverlay.classList.add('hidden');
     activateController();
+  });
+
+  socket.on(EV.RETURN_TO_LOBBY, ({ message }) => {
+    toast(message || 'Volviendo al menú principal…', 'info', 3000);
+    S.isFinished = false;
+    S.isReady = false;
+
+    const finishedOverlay = $('ctrl-finished-overlay');
+    if (finishedOverlay) finishedOverlay.classList.add('hidden');
+    const resultsOverlay = $('ctrl-results-overlay');
+    if (resultsOverlay) resultsOverlay.classList.add('hidden');
+    const wrongWayBanner = $('ctrl-wrong-way-banner');
+    if (wrongWayBanner) wrongWayBanner.classList.add('hidden');
+
+    if (_inputInterval) {
+      clearInterval(_inputInterval);
+      _inputInterval = null;
+    }
+
+    S.inputs.steer = 0;
+    S.inputs.accel = false;
+    S.inputs.brake = false;
+    S.inputs.drift = false;
+    S.inputs.fire  = false;
+    S.inputs.power = false;
+    S.smoothSteer  = 0;
+
+    updateConfirmationUI();
+    showPhase('mobile-selection');
   });
 
   // GAME_COUNTDOWN is emitted at the start of every race countdown
@@ -1340,6 +1377,12 @@ function wireButtons() {
     toast(S.inverted ? '⇄ Giro invertido' : '⇄ Giro normal');
   });
   $('btn-sensitivity')?.addEventListener('click', cycleSensitivity);
+
+  $('btn-host-abort')?.addEventListener('click', () => {
+    if (confirm('¿Terminar la carrera actual y volver al menú principal para todos los jugadores?')) {
+      S.socket.emit(EV.RETURN_TO_LOBBY, { seatToken: S.seatToken });
+    }
+  });
 
   // Garage / loadout toggle
 }

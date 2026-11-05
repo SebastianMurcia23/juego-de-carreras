@@ -1196,3 +1196,33 @@ controlador móvil ni el contrato `track_data`. El rendimiento a 30 Hz con
 | `client/index.html` | Se actualizaron las versiones de script a `gameRenderer.js?v=8` y `threeGameRenderer.js?v=20` para invalidar la caché del navegador. |
 
 **Verificación:** `npm test` completo (10/10 suites PASS, incluyendo los 441 680 tests de límites en las 40 pistas).
+
+
+### Tarea 18: Volver al lobby (admin puede abortar la carrera)
+
+**Objetivo:** El anfitrión puede finalizar una carrera en curso en cualquier momento y devolver a todos los jugadores a la pantalla de selección de vehículo, sin expulsar a nadie del lobby.
+
+**Causa raíz / motivación:** No existía ningún mecanismo para que el host pudiera reiniciar la partida sin que los jugadores tuvieran que salir y volver a entrar manualmente.
+
+**Archivos modificados:**
+
+| Archivo | Cambio |
+|---|---|
+| `shared/constants.js` | Se añadió `RETURN_TO_LOBBY: 'return_to_lobby'` a `SHARED.EVENTS`. |
+| `server/RoomManager.js` | Dos métodos nuevos: `returnToLobby(roomCode, hostToken, seatToken)` — detiene el `GameRoom`, limpia la instancia, resetea `isReady` y `state` de todos los asientos, emite `RETURN_TO_LOBBY` a la sala y devuelve `{ success: true }`; y `validateHostSeat(roomCode, seatToken)` — comprueba que el `seatToken` pertenece al anfitrión. |
+| `server/index.js` | Listener de socket para `EV.RETURN_TO_LOBBY`: extrae `hostToken` o `seatToken` y delega en `rooms.returnToLobby(...)`. |
+| `client/index.html` | Botón `#btn-admin-return-lobby` en el panel de administración (debajo del botón de inicio); `#race-host-controls` con botón `#btn-race-abort` como overlay en la esquina superior izquierda de la vista de carrera (solo visible para el host). |
+| `client/js/main.js` | Función `handleReturnToLobby()` con diálogo de confirmación y emisión del evento; listeners para `#btn-race-abort` y `#btn-admin-return-lobby`; atajo de teclado `Escape` durante la carrera. Handler de `EV.RETURN_TO_LOBBY`: detiene el renderizador, llama `showState('lobby')`, resetea la UI y reactiva el botón de inicio. |
+| `client/js/player.js` | Handler de `EV.RETURN_TO_LOBBY`: detiene el renderizador, llama `showState('linked')`, resetea `isReady` y el botón de listo. |
+| `client/controller.html` | Botón `#btn-host-abort` (oculto por defecto) en la barra de utilidades del volante, con estilo rosa/rojo y tooltip "Solo Anfitrión". |
+| `client/js/controller.js` | En el handler `SEAT_LINKED`: muestra `#btn-host-abort` si `S.isHost`. Listener del botón: diálogo de confirmación y emisión de `EV.RETURN_TO_LOBBY` con `seatToken`. Handler de `EV.RETURN_TO_LOBBY`: resetea todo el estado de control, detiene el intervalo de inputs y llama `showPhase('mobile-selection')`. |
+| `client/js/threeGameRenderer.js` | En `stop()`: limpia `R.carGroup`, `R.projectileGroup`, `R.powerEffectGroup`, vacía `R.cars` y anula `R.state`. En `init()`: detecta si el renderer ya existía pero el render loop estaba inactivo y lo reactiva con `requestAnimationFrame(loop)`. En `updateCars()`: detecta si el modelo de vehículo (`data.cid`) cambió para reconstruir el mesh 3D correspondiente, y hace teleport/snap directo a la parrilla si la distancia es superior a 200 px. |
+| `client/js/controller.js` | Restaurado el cuerpo de `syncLoadoutToServer()` y `unlockMobileVehicle()` para que emitan `SELECT_LOADOUT` y `TOGGLE_READY` respectivamente. |
+| `tools/verify-return-to-lobby.js` | Test unitario ampliado: verifica que tras volver al lobby se puede cambiar de carro desde la pantalla de selección, que al reiniciar la carrera el nuevo `GameRoom` asigna el nuevo modelo y ubica al piloto en la parrilla desde cero (lap 0, checkpoint 0, velocidad 0), y comprueba abort desde el móvil. |
+| `package.json` | `verify-return-to-lobby.js` añadido a `npm test` y como script independiente `test:return-to-lobby`. |
+
+**Verificación:** `npm test` 11/11 suites PASS (incluyendo el nuevo `verify-return-to-lobby` y los 441 680 tests de límites de pista).
+
+**Riesgos / pendiente:**
+- El botón `#btn-race-abort` solo es visible para el host (pantalla principal). Los espectadores futuros o co-administradores no tienen acceso; si se añaden roles, habrá que extender `validateHostSeat`.
+- El diálogo de confirmación es nativo (`window.confirm`); en móvil puede quedar bloqueado por el modo pantalla completa en algunos navegadores.

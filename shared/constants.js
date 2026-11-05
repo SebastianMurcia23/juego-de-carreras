@@ -54,6 +54,7 @@ SHARED.EVENTS = {
   PLAYER_KICKED:      'player_kicked',
   START_GAME:         'start_game',
   GAME_STARTING:      'game_starting',
+  RETURN_TO_LOBBY:    'return_to_lobby',
 
   // Stage 3 & 6: Game state & pickups
   GAME_COUNTDOWN:     'game_countdown',     // server → all: { seconds }

@@ -378,6 +378,17 @@ function initSocket() {
     }
   });
 
+  socket.on(EV.RETURN_TO_LOBBY, ({ message }) => {
+    toast(message || 'El anfitrión ha finalizado la carrera. De vuelta al menú.', 'info', 4000);
+    if (window.GAME_RENDERER && window.GAME_RENDERER.stop) {
+      window.GAME_RENDERER.stop();
+    }
+    showState('linked');
+    S.isReady = false;
+    S.readyPending = false;
+    updateGuestReadyButton();
+  });
+
   socket.on(EV.TRACK_DATA, (trackData) => {
     showState('race');
     if (window.GAME_RENDERER) {

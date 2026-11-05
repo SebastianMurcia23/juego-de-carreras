@@ -399,10 +399,16 @@
 ════════════════════════════════════════════════════════════════════════ -->
 <div id="state-race" class="page-state layer" style="width:100vw; height:100vh; overflow:hidden; background:#0a0d14;">
   <canvas id="race-canvas" style="width:100%; height:100%; display:block;"></canvas>
+  <!-- In-game Host Control Bar -->
+  <div id="race-host-controls" style="position:fixed; top:18px; left:152px; z-index:30; display:flex; gap:10px; align-items:center;">
+    <button id="btn-race-abort" class="btn btn-secondary btn-sm" style="background:rgba(10,13,20,0.88); border:1px solid rgba(255,0,127,0.7); color:var(--pink); font-size:0.75rem; font-weight:700; padding:7px 14px; backdrop-filter:blur(6px); cursor:pointer; border-radius:8px; box-shadow:0 2px 10px rgba(255,0,127,0.25);">
+      🛑 Salir al Menú Principal
+    </button>
+  </div>
 </div>
 
 <!-- ─── Scripts ──────────────────────────────────────────────────────────── -->
-<script src="/shared/constants.js?v=8"></script>
+<script src="/shared/constants.js?v=9"></script>
 <script src="/config/feature-flags.js"></script>
 <script src="/config/cars.legacy.js"></script>
 <script src="/config/cars.f1.js"></script>
@@ -425,8 +431,8 @@
 <script src="/vendor/three/examples/js/postprocessing/UnrealBloomPass.js"></script>
 <script src="/js/fx/particles.js"></script>
 <script src="/js/fx/itemMeshes.js"></script>
-<script src="/js/threeGameRenderer.js?v=20"></script>
+<script src="/js/threeGameRenderer.js?v=21"></script>
 <script src="/socket.io/socket.io.js"></script>
-<script src="/js/main.js?v=10"></script>
+<script src="/js/main.js?v=12"></script>
 </body>
 </html>

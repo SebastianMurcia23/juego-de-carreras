@@ -708,6 +708,63 @@ class RoomManager {
     return this.prepareNextChampionshipRace(roomCode);
   }
 
+  /* ── Return to lobby / abort active race (Admin only) ─────────────────── */
+  returnToLobby(roomCode, hostToken, seatToken = null) {
+    const isAuth = this.validateHostToken(roomCode, hostToken) ||
+      (seatToken && this.validateHostSeat(roomCode, seatToken));
+
+    if (!isAuth) {
+      return { error: 'UNAUTHORIZED' };
+    }
+
+    const room = this.rooms.get(roomCode);
+    if (!room) return { error: 'ROOM_NOT_FOUND' };
+
+    // Stop active game room and physics loop if running
+    if (room.gameRoom) {
+      room.gameRoom.stop();
+      room.gameRoom = null;
+    }
+
+    if (room.intermissionTimer) {
+      clearTimeout(room.intermissionTimer);
+      room.intermissionTimer = null;
+    }
+
+    // Set room state back to lobby
+    room.state = STATES.ROOM.LOBBY;
+
+    // Reset readiness for all retained seats without kicking anyone
+    for (const [, seat] of room.seats) {
+      seat.isReady = false;
+      seat.state = seat.name ? STATES.SEAT.SELECTING : STATES.SEAT.LINKED;
+    }
+
+    // Reset championship fully so a new championship can begin fresh
+    if (room.championship) {
+      room.championship.raceNumber = 0;
+      room.championship.standings  = new Map();
+    }
+
+    // Broadcast to all connected sockets in the room
+    this.io.to(roomCode).emit(EV.RETURN_TO_LOBBY, {
+      message: 'El anfitrión ha finalizado la carrera. Seleccionen sus vehículos.',
+    });
+
+    this._broadcastPlayers(roomCode);
+    console.log(`[room] Room ${roomCode} returned to lobby by host. All ${room.seats.size} players retained.`);
+
+    return { success: true };
+  }
+
+  validateHostSeat(roomCode, seatToken) {
+    if (!seatToken) return false;
+    const room = this.rooms.get(roomCode);
+    if (!room) return false;
+    const seat = room.seats.get(seatToken);
+    return Boolean(seat && seat.isHost);
+  }
+
   /* ── Stage 3: Get active game room ─────────────────────────────────────── */
 
   getGameRoom(roomCode) {

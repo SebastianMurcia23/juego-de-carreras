@@ -46,10 +46,15 @@
     if (!R.canvas) return;
 
     if (R.renderer && R.glCanvas && R.glCanvas.parentNode && R.scene) {
+      var wasRunning = R.running;
       R.running = true;
       R.fallbackMode = false;
       R.canvas.style.visibility = 'hidden';
       resize();
+      if (!wasRunning) {
+        R._lastFrameTime = performance.now();
+        requestAnimationFrame(loop);
+      }
       return;
     }
 
@@ -709,6 +714,16 @@
   }
   function stop() {
     R.running = false;
+    if (R.carGroup) clearGroup(R.carGroup);
+    if (R.projectileGroup) clearGroup(R.projectileGroup);
+    if (R.powerEffectGroup) clearGroup(R.powerEffectGroup);
+    R.cars = {};
+    R.state = null;
+    R._camPos = null;
+    R._camLook = null;
+    R.results = null;
+    R.intermission = null;
+    R.arrivals = [];
     if (R.fallbackMode && canvasRendererFallback) canvasRendererFallback.stop();
   }
 
@@ -1026,6 +1041,8 @@
     if (!ARCADE) {
       var classicG = makeClassicCar(data);
       classicG.userData.kD = kD;
+      classicG.userData.carId = data.cid;
+      classicG.userData.colorHex = colHex;
       return classicG;
     }
 
@@ -1037,6 +1054,8 @@
     g.userData.wheels = kart.wheels;
     g.userData.frontWheels = kart.frontWheels;
     g.userData.kD = kD;
+    g.userData.carId = data.cid;
+    g.userData.colorHex = colHex;
     kart.m.scale.set(kD, kD, kD);
     return g;
   }
@@ -1051,7 +1070,7 @@
       var data = R.state.cars[i];
       var group = R.cars[data.st];
       seen[data.st] = true;
-      if (!group || group.parent !== R.carGroup) {
+      if (!group || group.parent !== R.carGroup || group.userData.carId !== data.cid) {
         if (group && group.parent) group.parent.remove(group);
         group = makeCar(data);
         R.cars[data.st] = group;
@@ -1073,7 +1092,11 @@
         group.userData.target = new THREE.Vector3(predictedX, 3, -predictedY);
       } else {
         group.userData.target.set(predictedX, 3, -predictedY);
-        group.position.lerp(group.userData.target, isLocal ? 0.92 : 0.5);
+        if (group.position.distanceTo(group.userData.target) > 200) {
+          group.position.copy(group.userData.target);
+        } else {
+          group.position.lerp(group.userData.target, isLocal ? 0.92 : 0.5);
+        }
       }
 
       group.rotation.y = data.a - Math.PI / 2;
